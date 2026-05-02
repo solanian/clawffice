@@ -76,13 +76,13 @@ OPENCLAW_CLI = os.environ.get("OPENCLAW_CLI", "openclaw").strip() or "openclaw"
 OPENCLAW_CHAT_DEFAULT_AGENT = os.environ.get("OPENCLAW_CHAT_AGENT", "star-office-ui").strip() or "star-office-ui"
 OPENCLAW_GATEWAY_URL = os.environ.get("OPENCLAW_GATEWAY_URL", "").strip()
 try:
-    OPENCLAW_CHAT_TIMEOUT_SECONDS = max(10, int(os.environ.get("OPENCLAW_CHAT_TIMEOUT", "600")))
+    OPENCLAW_CHAT_TIMEOUT_SECONDS = max(10, int(os.environ.get("OPENCLAW_CHAT_TIMEOUT", "1800")))
 except ValueError:
-    OPENCLAW_CHAT_TIMEOUT_SECONDS = 600
+    OPENCLAW_CHAT_TIMEOUT_SECONDS = 1800
 try:
-    OPENCLAW_CHAT_SEND_TIMEOUT_SECONDS = max(30, int(os.environ.get("OPENCLAW_CHAT_SEND_TIMEOUT", "300")))
+    OPENCLAW_CHAT_SEND_TIMEOUT_SECONDS = max(30, int(os.environ.get("OPENCLAW_CHAT_SEND_TIMEOUT", "120")))
 except ValueError:
-    OPENCLAW_CHAT_SEND_TIMEOUT_SECONDS = 300
+    OPENCLAW_CHAT_SEND_TIMEOUT_SECONDS = 120
 OPENCLAW_HISTORY_TIMEOUT_MS = min(120000, max(60000, OPENCLAW_CHAT_TIMEOUT_SECONDS * 1000))
 CHAT_WAITING_MESSAGE = "응답을 기다리는 중..."
 
@@ -724,19 +724,48 @@ def _openclaw_message_records(session_key: str, openclaw_agent_id: str) -> list[
     return records
 
 
-def _find_openclaw_user_submission_for_content(session_key: str, openclaw_agent_id: str, user_content: str) -> str | None:
+def _iso_to_timestamp(value) -> float | None:
+    if not value:
+        return None
+    try:
+        text = str(value).strip()
+        if not text:
+            return None
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
+def _timestamp_in_turn_window(timestamp, after_iso: str | None = None, before_iso: str | None = None) -> bool:
+    ts = _iso_to_timestamp(timestamp)
+    if ts is None:
+        return True
+    after_ts = _iso_to_timestamp(after_iso)
+    if after_ts is not None and ts < after_ts - 5:
+        return False
+    before_ts = _iso_to_timestamp(before_iso)
+    if before_ts is not None and ts >= before_ts:
+        return False
+    return True
+
+
+def _find_openclaw_user_submission_for_content(session_key: str, openclaw_agent_id: str, user_content: str, after_iso: str | None = None, before_iso: str | None = None) -> str | None:
     needle = (user_content or "").strip()
     if not needle:
         return None
 
     records = _openclaw_message_records(session_key, openclaw_agent_id)
     for record in reversed(records):
-        if record.get("role") == "user" and needle in str(record.get("text") or ""):
+        if (
+            record.get("role") == "user"
+            and needle in str(record.get("text") or "")
+            and _timestamp_in_turn_window(record.get("timestamp"), after_iso, before_iso)
+        ):
             return str(record.get("timestamp") or datetime.now().isoformat())
     return None
 
 
-def _find_openclaw_reply_for_user_content(session_key: str, openclaw_agent_id: str, user_content: str) -> tuple[str, str] | None:
+def _find_openclaw_reply_for_user_content(session_key: str, openclaw_agent_id: str, user_content: str, after_iso: str | None = None, before_iso: str | None = None) -> tuple[str, str] | None:
     needle = (user_content or "").strip()
     if not needle:
         return None
@@ -744,7 +773,11 @@ def _find_openclaw_reply_for_user_content(session_key: str, openclaw_agent_id: s
     records = _openclaw_message_records(session_key, openclaw_agent_id)
     matching_indexes = [
         index for index, record in enumerate(records)
-        if record.get("role") == "user" and needle in str(record.get("text") or "")
+        if (
+            record.get("role") == "user"
+            and needle in str(record.get("text") or "")
+            and _timestamp_in_turn_window(record.get("timestamp"), after_iso, before_iso)
+        )
     ]
     for index in reversed(matching_indexes):
         for record in records[index + 1:]:
@@ -871,7 +904,7 @@ def _expire_stale_chat_turns(conn):
         SET status = 'error',
             error_text = COALESCE(error_text, '응답 생성이 중단되었습니다. 다시 메시지를 보내주세요.'),
             updated_at = ?
-        WHERE status = 'pending' AND created_at < ?
+        WHERE status IN ('pending', 'finalizing') AND created_at < ?
         """,
         (now_iso, cutoff),
     )
@@ -883,7 +916,7 @@ def _get_pending_chat_turn(conn, conversation_id: int):
         """
         SELECT id, conversation_id, user_message_id, status, created_at, updated_at
         FROM chat_turns
-        WHERE conversation_id = ? AND status = 'pending'
+        WHERE conversation_id = ? AND status IN ('pending', 'finalizing')
         ORDER BY id DESC
         LIMIT 1
         """,
@@ -925,6 +958,19 @@ def _finish_chat_turn(conn, turn_id: int, status: str, openclaw_agent_id: str | 
         """,
         (status, openclaw_agent_id, reply_message_id, error_message_id, error_text, now_iso, turn_id),
     )
+
+
+def _claim_chat_turn_for_completion(conn, turn_id: int) -> bool:
+    cur = conn.execute(
+        """
+        UPDATE chat_turns
+        SET status = 'finalizing',
+            updated_at = ?
+        WHERE id = ? AND status = 'pending'
+        """,
+        (datetime.now().isoformat(), turn_id),
+    )
+    return cur.rowcount == 1
 
 
 def _mark_chat_turn_gateway_accepted(conn, turn_id: int, openclaw_agent_id: str | None = None, run_id: str | None = None, accepted_at: str | None = None):
@@ -974,7 +1020,27 @@ def _recover_pending_chat_turns(conn, conversation_row):
             _finish_chat_turn(conn, turn["id"], "error", error_text="사용자 메시지를 찾지 못했습니다.")
             continue
 
-        submitted_at = _find_openclaw_user_submission_for_content(session_key, openclaw_agent_id, user_message["content"])
+        next_user_message = conn.execute(
+            """
+            SELECT created_at
+            FROM messages
+            WHERE conversation_id = ?
+              AND id > ?
+              AND lower(role) = 'user'
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (conversation_row["id"], user_message["id"]),
+        ).fetchone()
+        before_iso = next_user_message["created_at"] if next_user_message else None
+
+        submitted_at = _find_openclaw_user_submission_for_content(
+            session_key,
+            openclaw_agent_id,
+            user_message["content"],
+            user_message["created_at"],
+            before_iso,
+        )
         if submitted_at:
             _mark_chat_turn_gateway_accepted(
                 conn,
@@ -999,6 +1065,8 @@ def _recover_pending_chat_turns(conn, conversation_row):
 
         existing_reply = _find_existing_agent_reply_for_user_message(conn, conversation_row["id"], user_message["id"])
         if existing_reply:
+            if not _claim_chat_turn_for_completion(conn, turn["id"]):
+                continue
             _finish_chat_turn(
                 conn,
                 turn["id"],
@@ -1009,10 +1077,18 @@ def _recover_pending_chat_turns(conn, conversation_row):
             recovered += 1
             continue
 
-        found = _find_openclaw_reply_for_user_content(session_key, openclaw_agent_id, user_message["content"])
+        found = _find_openclaw_reply_for_user_content(
+            session_key,
+            openclaw_agent_id,
+            user_message["content"],
+            user_message["created_at"],
+            before_iso,
+        )
         if not found:
             continue
         reply_text, reply_created_at = found
+        if not _claim_chat_turn_for_completion(conn, turn["id"]):
+            continue
         if turn["error_message_id"]:
             conn.execute("DELETE FROM messages WHERE id = ?", (turn["error_message_id"],))
         reply_message = _insert_chat_message(conn, conversation_row["id"], "agent", reply_text, reply_created_at)
@@ -1115,7 +1191,7 @@ def _conversation_messages_with_pending(conn, conversation_id: int, limit: int):
         """
         SELECT id, user_message_id, created_at
         FROM chat_turns
-        WHERE conversation_id = ? AND status = 'pending'
+        WHERE conversation_id = ? AND status IN ('pending', 'finalizing')
         ORDER BY id ASC
         """,
         (conversation_id,),
@@ -1686,6 +1762,8 @@ def _complete_chat_turn_background(turn_id: int, agent_id: str, agent_name: str,
             if not turn or turn["status"] != "pending":
                 return
             conversation = _get_or_create_conversation(conn, agent_id, agent_name)
+            if not _claim_chat_turn_for_completion(conn, turn_id):
+                return
             existing_reply = _find_existing_agent_reply_for_user_message(conn, conversation["id"], turn["user_message_id"])
             if existing_reply:
                 _finish_chat_turn(
