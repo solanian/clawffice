@@ -9,8 +9,8 @@
 Supports multi-agent collaboration, trilingual UI (CN/EN/JP), AI-powered room design, and desktop pet mode.
 Best experienced with [OpenClaw](https://github.com/openclaw/openclaw), but also works standalone as a status dashboard.
 
-> This project was co-created by **[Ring Hyacinth](https://x.com/ring_hyacinth)** and **[Simon Lee](https://x.com/simonxxoo)**, and is continuously maintained and improved together with community contributors ([@Zhaohan-Wang](https://github.com/Zhaohan-Wang), [@Jah-yee](https://github.com/Jah-yee), [@liaoandi](https://github.com/liaoandi)).
-> Issues and PRs are welcome — thank you to everyone who contributes.
+> Clawffice was built as an independent project that references the original Star Office UI project.
+> Issues and PRs are welcome.
 
 ---
 
@@ -22,7 +22,7 @@ If you're using [OpenClaw](https://github.com/openclaw/openclaw), just send this
 
 ```text
 Please follow this SKILL.md to deploy Clawffice🦞 for me:
-https://github.com/ringhyacinth/clawffice/blob/master/SKILL.md
+https://github.com/solanian/clawffice/blob/master/SKILL.md
 ```
 
 Your lobster will automatically clone the repo, install dependencies, start the backend, configure status sync, and send you the access URL.
@@ -33,7 +33,7 @@ Your lobster will automatically clone the repo, install dependencies, start the 
 
 ```bash
 # 1) Clone the repo
-git clone https://github.com/ringhyacinth/clawffice.git
+git clone https://github.com/solanian/clawffice.git
 cd clawffice
 
 # 2) Install dependencies (Python 3.10+ required)
@@ -291,4 +291,4 @@ clawffice/
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/image?repos=ringhyacinth/clawffice&type=date&legend=top-left)](https://www.star-history.com/?repos=ringhyacinth%2Fclawffice&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/image?repos=solanian/clawffice&type=date&legend=top-left)](https://www.star-history.com/?repos=solanian%2Fclawffice&type=date&legend=top-left)

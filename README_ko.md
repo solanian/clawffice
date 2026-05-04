@@ -8,7 +8,7 @@
 
 멀티 agent 협업, 한국어/영어/중국어/일본어 UI, AI 배경 생성, 데스크톱 펫 모드를 지원합니다. [OpenClaw](https://github.com/openclaw/openclaw)와 함께 쓰면 가장 자연스럽지만, 독립적인 상태 대시보드로도 사용할 수 있습니다.
 
-> 이 프로젝트는 **[Ring Hyacinth](https://x.com/ring_hyacinth)**와 **[Simon Lee](https://x.com/simonxxoo)**가 함께 만들었고, 커뮤니티 기여자들과 계속 유지보수하고 있습니다.
+> Clawffice는 기존 Star Office UI 프로젝트를 참고해 만든 독립 프로젝트입니다.
 
 ---
 
@@ -17,7 +17,7 @@
 ### 1. Docker로 실행
 
 ```bash
-git clone https://github.com/ringhyacinth/clawffice.git
+git clone https://github.com/solanian/clawffice.git
 cd clawffice
 cp .env.example .env
 docker compose up --build
@@ -30,7 +30,7 @@ docker compose up --build
 > Python 3.10 이상이 필요합니다.
 
 ```bash
-git clone https://github.com/ringhyacinth/clawffice.git
+git clone https://github.com/solanian/clawffice.git
 cd clawffice
 python3 -m pip install -r backend/requirements.txt
 cp state.sample.json state.json
