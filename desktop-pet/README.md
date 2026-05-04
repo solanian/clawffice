@@ -1,13 +1,13 @@
-# Star Office Tauri Desktop Shell
+# clawffice Tauri Desktop Shell
 
-这个目录用于把 `Star-Office-UI` 包成桌面应用（透明窗口），并在启动时自动拉起后端进程。
+这个目录用于把 `clawffice` 包成桌面应用（透明窗口），并在启动时自动拉起后端进程。
 
 ## 开发运行
 
 先在仓库根目录准备 Python 环境：
 
 ```bash
-cd /Users/wangzhaohan/Documents/GitHub/Star-Office-UI
+cd /Users/wangzhaohan/Documents/GitHub/clawffice
 uv venv .venv
 uv pip install -r backend/requirements.txt --python .venv/bin/python
 ```
@@ -15,7 +15,7 @@ uv pip install -r backend/requirements.txt --python .venv/bin/python
 再启动 Tauri：
 
 ```bash
-cd /Users/wangzhaohan/Documents/GitHub/Star-Office-UI/desktop-pet
+cd /Users/wangzhaohan/Documents/GitHub/clawffice/desktop-pet
 npm install
 npm run dev
 ```
@@ -33,5 +33,5 @@ npm run dev
 ## 可选环境变量
 
 - `STAR_PROJECT_ROOT`：项目根目录（默认会自动探测）
-- `STAR_BACKEND_PYTHON`：自定义 Python 可执行路径
-- `STAR_BACKEND_URL`：自定义桌面窗口打开的 URL
+- `CLAWFFICE_BACKEND_PYTHON`：自定义 Python 可执行路径
+- `CLAWFFICE_BACKEND_URL`：自定义桌面窗口打开的 URL

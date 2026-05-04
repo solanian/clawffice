@@ -1,4 +1,4 @@
-# Star Office UI — 开源发布准备清单（仅准备，不上传）
+# clawffice — 开源发布准备清单（仅准备，不上传）
 
 ## 0. 当前目标
 - 本文档用于“发布前准备”，不执行实际上传。
@@ -60,7 +60,7 @@ venv/
 
 ## 3. 准备中的发布包建议结构
 ```
-star-office-ui/
+clawffice/
   backend/
     app.py
     requirements.txt

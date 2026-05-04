@@ -1,10 +1,10 @@
-# PR Draft — Star Office UI March Refresh
+# PR Draft — clawffice March Refresh
 
 ## Title
 feat: asset editor + i18n + loading UX + sprite pipeline + security/perf refinements
 
 ## Summary
-This PR delivers a full refresh of Star Office UI across UX, asset pipeline, localization, stability, and deployment security.
+This PR delivers a full refresh of clawffice across UX, asset pipeline, localization, stability, and deployment security.
 
 ### What changed
 
@@ -83,5 +83,5 @@ This PR delivers a full refresh of Star Office UI across UX, asset pipeline, loc
 ## How to create PR
 1. `git checkout -b feat/march-refresh`
 2. `git push -u origin feat/march-refresh`
-3. Open PR to `ringhyacinth/Star-Office-UI:main`
+3. Open PR to `ringhyacinth/clawffice:main`
 4. Paste this document as PR description

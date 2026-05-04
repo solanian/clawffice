@@ -14,7 +14,7 @@
 ## 启动方式
 
 ```bash
-cd "/Users/wangzhaohan/Documents/GitHub/Star-Office-UI/electron-shell"
+cd "/Users/wangzhaohan/Documents/GitHub/clawffice/electron-shell"
 npm install
 npm run dev
 ```
@@ -22,9 +22,9 @@ npm run dev
 ## 可选环境变量
 
 - `STAR_PROJECT_ROOT`：项目根目录（默认自动探测）
-- `STAR_BACKEND_PYTHON`：后端 Python 可执行路径
-- `STAR_BACKEND_HOST`：后端主机（默认 `127.0.0.1`）
-- `STAR_BACKEND_PORT`：后端端口（默认 `19000`）
+- `CLAWFFICE_BACKEND_PYTHON`：后端 Python 可执行路径
+- `CLAWFFICE_BACKEND_HOST`：后端主机（默认 `127.0.0.1`）
+- `CLAWFFICE_BACKEND_PORT`：后端端口（默认 `19000`）
 
 ## 说明
 

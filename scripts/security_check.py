@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Star Office UI security preflight checker (non-destructive).
+"""clawffice security preflight checker (non-destructive).
 
 Checks:
 - weak/default secrets in env
@@ -71,20 +71,20 @@ def file_has_secret_pattern(path: Path) -> list[str]:
 
 
 def main() -> int:
-    print("[security-check] Star Office UI preflight")
+    print("[security-check] clawffice preflight")
 
     failures: list[str] = []
     warnings: list[str] = []
 
-    env_mode = (os.getenv("STAR_OFFICE_ENV") or os.getenv("FLASK_ENV") or "").strip().lower()
+    env_mode = (os.getenv("CLAWFFICE_ENV") or os.getenv("STAR_OFFICE_ENV") or os.getenv("FLASK_ENV") or "").strip().lower()
     in_prod = env_mode in {"prod", "production"}
 
-    secret = os.getenv("FLASK_SECRET_KEY") or os.getenv("STAR_OFFICE_SECRET") or ""
+    secret = os.getenv("FLASK_SECRET_KEY") or os.getenv("CLAWFFICE_SECRET") or os.getenv("STAR_OFFICE_SECRET") or ""
     drawer_pass = os.getenv("ASSET_DRAWER_PASS") or ""
 
     if in_prod:
         if not is_strong_secret(secret):
-            failures.append("Weak/missing FLASK_SECRET_KEY (or STAR_OFFICE_SECRET) in production")
+            failures.append("Weak/missing FLASK_SECRET_KEY (or CLAWFFICE_SECRET) in production")
         if not is_strong_pass(drawer_pass):
             failures.append("Weak/missing ASSET_DRAWER_PASS in production")
     else:

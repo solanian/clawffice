@@ -1,4 +1,4 @@
-// Star Office UI - 布局与层级配置
+// clawffice - 布局与层级配置
 // 所有坐标、depth、资源路径统一管理在这里
 // 避免 magic numbers，降低改错风险
 

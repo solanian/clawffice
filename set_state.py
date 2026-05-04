@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Star Office UI 상태를 업데이트합니다.
+"""clawffice 상태를 업데이트합니다.
 
 OpenClaw에서 상태를 자동 동기화하려면 agent의 SOUL.md 또는 AGENTS.md에 규칙을 추가하세요:
   작업 시작 전: `python3 set_state.py writing "작업 내용"`
@@ -12,9 +12,10 @@ import os
 import sys
 from datetime import datetime
 
-STATE_FILE = os.environ.get(
-    "STAR_OFFICE_STATE_FILE",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.json"),
+STATE_FILE = (
+    os.environ.get("CLAWFFICE_STATE_FILE")
+    or os.environ.get("STAR_OFFICE_STATE_FILE")
+    or os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.json")
 )
 
 VALID_STATES = [

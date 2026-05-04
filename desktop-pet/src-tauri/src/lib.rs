@@ -426,10 +426,10 @@ fn find_project_root() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
         let home = PathBuf::from(home);
         let candidates = [
-            home.join("Documents").join("GitHub").join("Star-Office-UI"),
-            home.join("GitHub").join("Star-Office-UI"),
-            home.join("Documents").join("Star-Office-UI"),
-            home.join("Star-Office-UI"),
+            home.join("Documents").join("GitHub").join("clawffice"),
+            home.join("GitHub").join("clawffice"),
+            home.join("Documents").join("clawffice"),
+            home.join("clawffice"),
         ];
         for candidate in candidates {
             if candidate.join("backend").join("app.py").exists() {
@@ -468,6 +468,15 @@ fn spawn_backend(root: &PathBuf) -> Option<Child> {
     ];
 
     if let Ok(custom_python) = std::env::var("STAR_BACKEND_PYTHON") {
+        candidates.insert(
+            0,
+            (
+                PathBuf::from(custom_python),
+                vec![script.to_string_lossy().to_string()],
+            ),
+        );
+    }
+    if let Ok(custom_python) = std::env::var("CLAWFFICE_BACKEND_PYTHON") {
         candidates.insert(
             0,
             (

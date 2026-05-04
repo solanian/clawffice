@@ -1,17 +1,17 @@
 services:
-  star-office-ui:
+  clawffice:
     build:
       context: .
       dockerfile: Dockerfile
-    image: star-office-ui:latest
-    container_name: star-office-ui
+    image: clawffice:latest
+    container_name: clawffice
     restart: unless-stopped
     network_mode: host
     environment:
-      STAR_BACKEND_PORT: "19000"
+      CLAWFFICE_BACKEND_PORT: "19000"
       PYTHONPATH: "/app/backend"
-      STAR_OFFICE_ENV: "${STAR_OFFICE_ENV:-production}"
-      STAR_OFFICE_DATA_DIR: "/data"
+      CLAWFFICE_ENV: "${CLAWFFICE_ENV:-production}"
+      CLAWFFICE_DATA_DIR: "/data"
       CHAT_DB_FILE: "/data/chat.db"
       GUNICORN_TIMEOUT: "${GUNICORN_TIMEOUT:-900}"
       FLASK_SECRET_KEY: "${FLASK_SECRET_KEY:?set FLASK_SECRET_KEY in .env or Portainer stack variables}"
@@ -19,7 +19,7 @@ services:
       OPENCLAW_WORKSPACE: "/app"
       OPENCLAW_HOME: "/home/opc"
       OPENCLAW_CLI: "${OPENCLAW_CLI:-/home/opc/.npm-global/bin/openclaw}"
-      OPENCLAW_CHAT_AGENT: "${OPENCLAW_CHAT_AGENT:-star-office-ui}"
+      OPENCLAW_CHAT_AGENT: "${OPENCLAW_CHAT_AGENT:-clawffice manager}"
       OPENCLAW_CHAT_TIMEOUT: "${OPENCLAW_CHAT_TIMEOUT:-1800}"
       OPENCLAW_CHAT_SEND_TIMEOUT: "${OPENCLAW_CHAT_SEND_TIMEOUT:-120}"
       HOME: "/home/opc"
@@ -28,22 +28,22 @@ services:
       GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
       GEMINI_MODEL: "${GEMINI_MODEL:-nanobanana-pro}"
     volumes:
-      - /home/opc/workspace/Star-Office-UI:/app
-      - /home/opc/workspace/Star-Office-UI:/home/opc/workspace/Star-Office-UI
-      - /home/opc/workspace/Star-Office-UI/memory:/memory
+      - /home/opc/workspace/clawffice:/app
+      - /home/opc/workspace/clawffice:/home/opc/workspace/clawffice
+      - /home/opc/workspace/clawffice/memory:/memory
       - /home/opc/.openclaw:/home/opc/.openclaw
       - /home/opc/.npm-global:/home/opc/.npm-global:ro
       - /usr/bin/node:/usr/bin/node:ro
-      - /home/opc/workspace/Star-Office-UI/.runtime/openclaw-node-libs:/openclaw-node-libs:ro
-      - star-office-ui-data:/data
+      - /home/opc/workspace/clawffice/.runtime/openclaw-node-libs:/openclaw-node-libs:ro
+      - clawffice-data:/data
 
-  star-office-ui-agent-push:
-    image: star-office-ui:latest
-    container_name: star-office-ui-agent-push
+  clawffice-agent-push:
+    image: clawffice:latest
+    container_name: clawffice-agent-push
     restart: unless-stopped
     network_mode: host
     depends_on:
-      - star-office-ui
+      - clawffice
     command: ["python", "-u", "office-agent-push.py"]
     healthcheck:
       disable: true
@@ -51,13 +51,13 @@ services:
       OFFICE_JOIN_KEY: "${OFFICE_JOIN_KEY:-ocj_example_team_01}"
       OFFICE_AGENT_ID: "${OFFICE_AGENT_ID:-star}"
       OFFICE_AGENT_NAME: "${OFFICE_AGENT_NAME:-Star}"
-      OFFICE_OPENCLAW_AGENT_ID: "${OFFICE_OPENCLAW_AGENT_ID:-star-office-ui}"
+      OFFICE_OPENCLAW_AGENT_ID: "${OFFICE_OPENCLAW_AGENT_ID:-clawffice manager}"
       OFFICE_URL: "http://127.0.0.1:19000"
       OFFICE_LOCAL_STATE_FILE: "/app/state.json"
       OFFICE_STALE_STATE_TTL: "${OFFICE_STALE_STATE_TTL:-600}"
       PYTHONPATH: "/app/backend"
     volumes:
-      - /home/opc/workspace/Star-Office-UI:/app
+      - /home/opc/workspace/clawffice:/app
 
 volumes:
-  star-office-ui-data:
+  clawffice-data:

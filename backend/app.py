@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Star Office UI - Backend State Service"""
+"""clawffice - Backend State Service"""
 
 from flask import Flask, jsonify, send_from_directory, make_response, request, session
 from datetime import datetime, timedelta
+import base64
 import json
 import os
 import random
 import math
 import re
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -70,10 +72,10 @@ AUTO_ROTATE_MIN_INTERVAL_SECONDS = int(os.getenv("AUTO_ROTATE_MIN_INTERVAL_SECON
 _last_home_rotate_at = 0
 ASSET_DEFAULTS_FILE = os.path.join(ROOT_DIR, "asset-defaults.json")
 RUNTIME_CONFIG_FILE = os.path.join(ROOT_DIR, "runtime-config.json")
-DATA_DIR = os.environ.get("STAR_OFFICE_DATA_DIR") or ROOT_DIR
+DATA_DIR = os.environ.get("CLAWFFICE_DATA_DIR") or os.environ.get("STAR_OFFICE_DATA_DIR") or ROOT_DIR
 CHAT_DB_FILE = os.environ.get("CHAT_DB_FILE") or os.path.join(DATA_DIR, "chat.db")
 OPENCLAW_CLI = os.environ.get("OPENCLAW_CLI", "openclaw").strip() or "openclaw"
-OPENCLAW_CHAT_DEFAULT_AGENT = os.environ.get("OPENCLAW_CHAT_AGENT", "star-office-ui").strip() or "star-office-ui"
+OPENCLAW_CHAT_DEFAULT_AGENT = os.environ.get("OPENCLAW_CHAT_AGENT", "clawffice manager").strip() or "clawffice manager"
 OPENCLAW_GATEWAY_URL = os.environ.get("OPENCLAW_GATEWAY_URL", "").strip()
 try:
     OPENCLAW_CHAT_TIMEOUT_SECONDS = max(10, int(os.environ.get("OPENCLAW_CHAT_TIMEOUT", "1800")))
@@ -89,6 +91,7 @@ CHAT_WAITING_MESSAGE = "응답을 기다리는 중..."
 # Canonical agent states: single source of truth for validation and mapping
 VALID_AGENT_STATES = frozenset({"idle", "writing", "researching", "executing", "syncing", "error"})
 WORKING_STATES = frozenset({"writing", "researching", "executing"})  # subset used for auto-idle TTL
+THINKING_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh", "adaptive", "max")
 STATE_TO_AREA_MAP = {
     "idle": "breakroom",
     "writing": "writing",
@@ -100,7 +103,7 @@ STATE_TO_AREA_MAP = {
 
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/static")
-app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.getenv("STAR_OFFICE_SECRET") or "star-office-dev-secret-change-me"
+app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.getenv("CLAWFFICE_SECRET") or os.getenv("STAR_OFFICE_SECRET") or "clawffice-dev-secret-change-me"
 
 # Session hardening
 app.config.update(
@@ -125,7 +128,7 @@ ASSET_DRAWER_PASS_DEFAULT = os.getenv("ASSET_DRAWER_PASS", "1234")
 if is_production_mode():
     hardening_errors = []
     if not is_strong_secret(str(app.secret_key)):
-        hardening_errors.append("FLASK_SECRET_KEY / STAR_OFFICE_SECRET is weak (need >=24 chars, non-default)")
+        hardening_errors.append("FLASK_SECRET_KEY / CLAWFFICE_SECRET is weak (need >=24 chars, non-default)")
     if not is_strong_drawer_pass(ASSET_DRAWER_PASS_DEFAULT):
         hardening_errors.append("ASSET_DRAWER_PASS is weak (do not use default 1234; recommend >=8 chars)")
     if hardening_errors:
@@ -264,6 +267,12 @@ ensure_electron_standalone_snapshot()
 
 
 _INDEX_HTML_CACHE = None
+_INDEX_HTML_CACHE_MTIME = None
+
+
+@app.route("/favicon.ico", methods=["GET"])
+def favicon():
+    return send_from_directory(FRONTEND_DIR, "favicon.svg", mimetype="image/svg+xml")
 
 
 @app.route("/", methods=["GET"])
@@ -273,11 +282,16 @@ def index():
     # 如需启用，可配置 AUTO_ROTATE_HOME_ON_PAGE_OPEN=1
     _maybe_apply_random_home_favorite()
 
-    global _INDEX_HTML_CACHE
-    if _INDEX_HTML_CACHE is None:
+    global _INDEX_HTML_CACHE, _INDEX_HTML_CACHE_MTIME
+    try:
+        index_mtime = os.path.getmtime(FRONTEND_INDEX_FILE)
+    except OSError:
+        index_mtime = None
+    if _INDEX_HTML_CACHE is None or _INDEX_HTML_CACHE_MTIME != index_mtime:
         with open(FRONTEND_INDEX_FILE, "r", encoding="utf-8") as f:
             raw_html = f.read()
         _INDEX_HTML_CACHE = raw_html.replace("{{VERSION_TIMESTAMP}}", VERSION_TIMESTAMP)
+        _INDEX_HTML_CACHE_MTIME = index_mtime
 
     resp = make_response(_INDEX_HTML_CACHE)
     resp.headers["Content-Type"] = "text/html; charset=utf-8"
@@ -617,6 +631,292 @@ def _openclaw_gateway_call(method: str, params: dict | None = None, timeout_ms: 
     return parsed
 
 
+def _openclaw_cli_run(args: list[str], timeout_seconds: int = 8) -> str:
+    cmd = [OPENCLAW_CLI, *args]
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=ROOT_DIR,
+            env=_openclaw_gateway_env(),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except FileNotFoundError:
+        raise RuntimeError(f"OpenClaw CLI를 찾지 못했습니다: {OPENCLAW_CLI}")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("OpenClaw CLI 응답 시간이 초과되었습니다")
+
+    stdout = (result.stdout or "").strip()
+    stderr = (result.stderr or "").strip()
+    if result.returncode != 0:
+        raise RuntimeError((stderr or stdout or "OpenClaw CLI 호출 실패")[-1000:])
+    return stdout
+
+
+def _openclaw_cli_json(args: list[str], timeout_seconds: int = 8) -> dict | list:
+    stdout = _openclaw_cli_run(args, timeout_seconds=timeout_seconds)
+    if not stdout:
+        return {}
+    try:
+        return json.loads(stdout)
+    except Exception:
+        for line in reversed([line.strip() for line in stdout.splitlines() if line.strip()]):
+            if not line.startswith(("{", "[")):
+                continue
+            try:
+                return json.loads(line)
+            except Exception:
+                continue
+    raise RuntimeError(f"OpenClaw CLI JSON 응답을 해석하지 못했습니다: {stdout[-1000:]}")
+
+
+def _load_openclaw_config() -> dict:
+    config_path = Path(os.path.expanduser("~/.openclaw/openclaw.json"))
+    try:
+        with config_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _openclaw_agent_config_entry(openclaw_agent_id: str, cfg: dict | None = None) -> tuple[dict, int | None]:
+    cfg = cfg if isinstance(cfg, dict) else _load_openclaw_config()
+    items = ((cfg.get("agents") or {}).get("list") or [])
+    for idx, item in enumerate(items):
+        if isinstance(item, dict) and item.get("id") == openclaw_agent_id:
+            return item, idx
+    return {}, None
+
+
+def _openclaw_model_value(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return value.get("primary") or value.get("model")
+    return None
+
+
+def _openclaw_model_config(openclaw_agent_id: str, latest_session: dict | None = None, openclaw_agent: dict | None = None) -> dict:
+    cfg = _load_openclaw_config()
+    entry, idx = _openclaw_agent_config_entry(openclaw_agent_id, cfg)
+    default_value = _openclaw_model_value(((cfg.get("agents") or {}).get("defaults") or {}).get("model"))
+    agent_value = _openclaw_model_value(entry.get("model") if isinstance(entry, dict) else None)
+    current_value = agent_value or (openclaw_agent or {}).get("model") or default_value or (latest_session or {}).get("model")
+    models = []
+    try:
+        data = _openclaw_cli_json(["models", "list", "--json"], timeout_seconds=8)
+        models = [m.get("key") for m in (data.get("models") or []) if isinstance(m, dict) and m.get("key")]
+    except Exception:
+        models = []
+    if current_value and current_value not in models:
+        models.insert(0, current_value)
+    return {
+        "configured": agent_value,
+        "default": default_value,
+        "effective": current_value,
+        "models": models,
+        "configPath": f"agents.list[{idx}].model" if idx is not None else None,
+    }
+
+
+def _openclaw_thinking_config(openclaw_agent_id: str, latest_session: dict | None = None) -> dict:
+    cfg = _load_openclaw_config()
+    entry, idx = _openclaw_agent_config_entry(openclaw_agent_id, cfg)
+    default_value = (((cfg.get("agents") or {}).get("defaults") or {}).get("thinkingDefault"))
+    agent_value = entry.get("thinkingDefault") if isinstance(entry, dict) else None
+    session_value = None
+    if isinstance(latest_session, dict):
+        session_value = (
+            latest_session.get("thinkingLevel")
+            or latest_session.get("thinking")
+            or latest_session.get("thinkingDefault")
+            or latest_session.get("reasoningEffort")
+        )
+    return {
+        "configured": agent_value,
+        "default": default_value,
+        "effective": agent_value or default_value,
+        "lastRun": session_value,
+        "levels": list(THINKING_LEVELS),
+        "configPath": f"agents.list[{idx}].thinkingDefault" if idx is not None else None,
+    }
+
+
+def _set_openclaw_agent_thinking(openclaw_agent_id: str, thinking: str) -> dict:
+    thinking = str(thinking or "").strip()
+    if thinking not in THINKING_LEVELS:
+        raise ValueError("thinking 값이 유효하지 않습니다")
+    _entry, idx = _openclaw_agent_config_entry(openclaw_agent_id)
+    if idx is None:
+        raise ValueError("OpenClaw agent 설정을 찾지 못했습니다")
+    path = f"agents.list[{idx}].thinkingDefault"
+    _openclaw_cli_run(["config", "set", path, json.dumps(thinking), "--strict-json"], timeout_seconds=8)
+    return {"thinkingDefault": thinking, "configPath": path}
+
+
+def _set_openclaw_agent_model(openclaw_agent_id: str, model: str) -> dict:
+    model = str(model or "").strip()
+    if not model:
+        raise ValueError("model 값이 없습니다")
+    _entry, idx = _openclaw_agent_config_entry(openclaw_agent_id)
+    if idx is None:
+        raise ValueError("OpenClaw agent 설정을 찾지 못했습니다")
+    available = set(_openclaw_model_config(openclaw_agent_id).get("models") or [])
+    if available and model not in available:
+        raise ValueError("선택할 수 없는 model입니다")
+    path = f"agents.list[{idx}].model"
+    payload = {"primary": model}
+    _openclaw_cli_run(["config", "set", path, json.dumps(payload), "--strict-json"], timeout_seconds=8)
+    return {"model": model, "configPath": path}
+
+
+def _openclaw_auth_summary() -> str:
+    config_path = Path(os.path.expanduser("~/.openclaw/openclaw.json"))
+    try:
+        with config_path.open("r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        profiles = ((cfg.get("auth") or {}).get("profiles") or {})
+        for profile_id, profile in profiles.items():
+            provider = profile.get("provider") or str(profile_id).split(":", 1)[0]
+            mode = profile.get("mode") or "configured"
+            safe_profile = re.sub(r"(:)[^:@/]+@", r"\1***@", str(profile_id))
+            return f"{mode} ({provider}:{safe_profile.split(':', 1)[-1]})"
+    except Exception:
+        pass
+    return "-"
+
+
+def _find_latest_openclaw_session(openclaw_agent_id: str, status_data: dict | None = None, sessions_data: dict | None = None) -> dict:
+    candidates = []
+    for item in (((status_data or {}).get("sessions") or {}).get("recent") or []):
+        if item.get("agentId") == openclaw_agent_id:
+            candidates.append(item)
+    for item in ((sessions_data or {}).get("sessions") or []):
+        if item.get("agentId") == openclaw_agent_id:
+            candidates.append(item)
+    if not candidates:
+        return {}
+    return max(candidates, key=lambda x: int(x.get("updatedAt") or 0))
+
+
+def _agent_openclaw_info(agent_id: str) -> dict:
+    agent_id = str(agent_id or "").strip() or "star"
+    record = _find_agent_record(agent_id) or {}
+    if not record and agent_id != "star":
+        raise ValueError("agent를 찾지 못했습니다")
+    if not record:
+        record = dict(DEFAULT_AGENTS[0])
+    openclaw_agent_id = _resolve_openclaw_agent_id(agent_id)
+
+    errors = []
+    status_data = {}
+    sessions_data = {}
+    agents_list = []
+    try:
+        status_data = _openclaw_cli_json(["status", "--json"], timeout_seconds=8)
+    except Exception as e:
+        errors.append(f"status: {e}")
+    try:
+        sessions_data = _openclaw_cli_json(["sessions", "--all-agents", "--json"], timeout_seconds=6)
+    except Exception as e:
+        errors.append(f"sessions: {e}")
+    try:
+        agents_list = _openclaw_cli_json(["agents", "list", "--json"], timeout_seconds=6)
+    except Exception as e:
+        errors.append(f"agents: {e}")
+
+    openclaw_agent = next((a for a in agents_list if a.get("id") == openclaw_agent_id), {}) if isinstance(agents_list, list) else {}
+    status_agent = next((a for a in (((status_data.get("agents") or {}).get("agents")) or []) if a.get("id") == openclaw_agent_id), {}) if isinstance(status_data, dict) else {}
+    latest_session = _find_latest_openclaw_session(openclaw_agent_id, status_data, sessions_data)
+    tasks = (status_data.get("tasks") or {}) if isinstance(status_data, dict) else {}
+    gateway = (status_data.get("gateway") or {}) if isinstance(status_data, dict) else {}
+    runtime = latest_session.get("agentRuntime") or {}
+    think_level = (
+        latest_session.get("thinking")
+        or latest_session.get("thinkingLevel")
+        or latest_session.get("reasoningEffort")
+        or latest_session.get("reasoning")
+        or runtime.get("thinking")
+        or runtime.get("thinkingLevel")
+    )
+
+    return {
+        "ok": True,
+        "agent": {
+            "agentId": record.get("agentId") or agent_id,
+            "name": record.get("name") or openclaw_agent.get("identityName") or openclaw_agent_id,
+            "isMain": bool(record.get("isMain")),
+            "avatar": record.get("avatar") or "guest_role_1",
+            "state": record.get("state") or "idle",
+            "detail": record.get("detail") or "",
+            "authStatus": record.get("authStatus") or "approved",
+            "lastPushAt": record.get("lastPushAt") or record.get("updated_at"),
+            "openclawAgentId": openclaw_agent_id,
+        },
+        "openclaw": {
+            "version": status_data.get("runtimeVersion") if isinstance(status_data, dict) else None,
+            "model": openclaw_agent.get("model") or latest_session.get("model"),
+            "modelProvider": latest_session.get("modelProvider"),
+            "modelConfig": _openclaw_model_config(openclaw_agent_id, latest_session, openclaw_agent),
+            "auth": _openclaw_auth_summary(),
+            "thinkLevel": think_level,
+            "thinking": _openclaw_thinking_config(openclaw_agent_id, latest_session),
+            "identityName": openclaw_agent.get("identityName"),
+            "identityEmoji": openclaw_agent.get("identityEmoji"),
+            "workspace": openclaw_agent.get("workspace") or status_agent.get("workspaceDir"),
+            "agentDir": openclaw_agent.get("agentDir"),
+            "isDefault": openclaw_agent.get("isDefault"),
+            "bindings": openclaw_agent.get("bindings"),
+            "gateway": {
+                "url": gateway.get("url"),
+                "reachable": gateway.get("reachable"),
+                "latencyMs": gateway.get("connectLatencyMs"),
+            },
+            "server": {
+                "host": record.get("remoteHost"),
+                "sshUser": record.get("remoteSshUser"),
+                "sshPort": record.get("remoteSshPort"),
+                "stateFile": record.get("remoteStateFile"),
+                "installDir": record.get("remoteInstallDir"),
+            },
+            "tokens": {
+                "input": latest_session.get("inputTokens"),
+                "output": latest_session.get("outputTokens"),
+                "total": latest_session.get("totalTokens"),
+                "cacheRead": latest_session.get("cacheRead"),
+                "cacheWrite": latest_session.get("cacheWrite"),
+            },
+            "context": {
+                "used": latest_session.get("totalTokens"),
+                "limit": latest_session.get("contextTokens"),
+                "percent": latest_session.get("percentUsed"),
+                "remaining": latest_session.get("remainingTokens"),
+            },
+            "session": {
+                "key": latest_session.get("key"),
+                "kind": latest_session.get("kind"),
+                "sessionId": latest_session.get("sessionId"),
+                "updatedAt": latest_session.get("updatedAt"),
+                "ageMs": latest_session.get("ageMs") or latest_session.get("age"),
+            },
+            "runtime": {
+                "id": runtime.get("id"),
+                "fallback": runtime.get("fallback"),
+                "source": runtime.get("source"),
+            },
+            "queue": {
+                "active": tasks.get("active"),
+                "queued": (tasks.get("byStatus") or {}).get("queued"),
+                "running": (tasks.get("byStatus") or {}).get("running"),
+                "failures": tasks.get("failures"),
+            },
+            "errors": errors,
+        },
+    }
+
+
 def _openclaw_sessions_dir(openclaw_agent_id: str) -> Path:
     safe_agent = re.sub(r"[^a-zA-Z0-9_.:-]+", "-", openclaw_agent_id or "").strip("-")
     if not safe_agent:
@@ -879,6 +1179,198 @@ def _run_openclaw_agent_turn(agent_id: str, content: str) -> tuple[str, str]:
     ), openclaw_agent_id
 
 
+def _run_openclaw_context_action(agent_id: str, action: str) -> dict:
+    agent_id = str(agent_id or "").strip() or "star"
+    action = str(action or "").strip().lower()
+    openclaw_agent_id = _resolve_openclaw_agent_id(agent_id)
+    if not openclaw_agent_id:
+        raise RuntimeError("이 캐릭터에 연결된 OpenClaw agent id가 없습니다")
+    session_key = _openclaw_session_key(agent_id, openclaw_agent_id)
+
+    if action == "compact":
+        reply, _ = _run_openclaw_agent_turn(agent_id, "/compact")
+        return {
+            "action": action,
+            "sessionKey": session_key,
+            "message": reply,
+        }
+
+    if action == "reset":
+        result = _openclaw_gateway_call(
+            "sessions.reset",
+            {"key": session_key},
+            timeout_ms=30000,
+        )
+        return {
+            "action": action,
+            "sessionKey": session_key,
+            "result": result,
+        }
+
+    raise ValueError("지원하지 않는 context action입니다")
+
+
+def _public_office_url() -> str:
+    configured = (
+        os.environ.get("PUBLIC_OFFICE_URL")
+        or os.environ.get("OFFICE_PUBLIC_URL")
+        or os.environ.get("OFFICE_URL")
+        or ""
+    ).strip().rstrip("/")
+    if configured:
+        return configured
+    return request.host_url.rstrip("/")
+
+
+def _remote_install_ssh_command(host: str, ssh_user: str, ssh_port: int, ssh_key_path: str, ssh_password: str) -> list[str]:
+    target = f"{ssh_user}@{host}"
+    cmd = [
+        "ssh",
+        "-p",
+        str(ssh_port),
+        "-o",
+        "BatchMode=yes" if not ssh_password else "BatchMode=no",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+    ]
+    if ssh_key_path:
+        cmd.extend(["-i", ssh_key_path])
+    cmd.append(target)
+    if ssh_password:
+        sshpass = shutil.which("sshpass")
+        if not sshpass:
+            raise RuntimeError("SSH password를 쓰려면 서버에 sshpass가 설치되어 있어야 합니다. SSH key path를 쓰는 방식을 권장합니다.")
+        cmd = [sshpass, "-p", ssh_password] + cmd
+    return cmd
+
+
+def _normalize_guest_avatar(value: str | None) -> str:
+    avatar = str(value or "").strip()
+    return avatar if re.match(r"^guest_role_[1-6]$", avatar) else "guest_role_1"
+
+
+def _safe_agent_path_id(value: str) -> str:
+    safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(value or "").strip()).strip(".-")
+    return safe or "agent"
+
+
+def _remote_agent_default_paths(openclaw_agent_id: str) -> tuple[str, str, str]:
+    safe_id = _safe_agent_path_id(openclaw_agent_id)
+    base_dir = f"~/.clawffice/{safe_id}"
+    return safe_id, base_dir, f"{base_dir}/state.json"
+
+
+def _remote_install_payload(data: dict) -> dict:
+    host = str(data.get("host") or "").strip()
+    ssh_user = str(data.get("sshUser") or data.get("ssh_user") or "").strip()
+    agent_name = str(data.get("agentName") or data.get("name") or "").strip()
+    join_key = str(data.get("joinKey") or "").strip()
+    openclaw_agent_id = str(data.get("openclawAgentId") or data.get("openclaw_agent_id") or "").strip()
+    office_url = str(data.get("officeUrl") or "").strip().rstrip("/") or _public_office_url()
+    ssh_key_path = str(data.get("sshKeyPath") or "").strip()
+    ssh_password = str(data.get("sshPassword") or "").strip()
+    safe_agent_id, remote_install_dir, remote_state_file = _remote_agent_default_paths(openclaw_agent_id)
+    avatar = _normalize_guest_avatar(data.get("avatar"))
+    try:
+        ssh_port = int(str(data.get("sshPort") or "22").strip())
+    except ValueError:
+        raise ValueError("SSH 포트는 숫자여야 합니다")
+
+    if not host or not ssh_user or not agent_name or not join_key or not openclaw_agent_id:
+        raise ValueError("서버, SSH 사용자, agent 이름, OpenClaw agent id, join key는 필수입니다")
+    if ssh_port < 1 or ssh_port > 65535:
+        raise ValueError("SSH 포트 범위가 올바르지 않습니다")
+    if host.startswith("-") or ssh_user.startswith("-"):
+        raise ValueError("서버와 SSH 사용자는 '-'로 시작할 수 없습니다")
+    if not re.match(r"^[a-zA-Z0-9_.@:-]+$", host):
+        raise ValueError("서버 값에는 영문, 숫자, 점, 하이픈, 콜론만 사용할 수 있습니다")
+    if not re.match(r"^[a-zA-Z0-9_.-]+$", ssh_user):
+        raise ValueError("SSH 사용자 값에는 영문, 숫자, 점, 하이픈, 밑줄만 사용할 수 있습니다")
+    for label, value in {
+        "서버": host,
+        "SSH 사용자": ssh_user,
+        "agent id": safe_agent_id,
+    }.items():
+        if any(ch in value for ch in ("\n", "\r", "\0")):
+            raise ValueError(f"{label} 값에 줄바꿈을 넣을 수 없습니다")
+    if not office_url.startswith(("http://", "https://")):
+        raise ValueError("office URL은 http:// 또는 https:// 로 시작해야 합니다")
+
+    return {
+        "host": host,
+        "sshUser": ssh_user,
+        "sshPort": ssh_port,
+        "agentName": agent_name,
+        "joinKey": join_key,
+        "openclawAgentId": openclaw_agent_id,
+        "officeUrl": office_url,
+        "sshKeyPath": ssh_key_path,
+        "sshPassword": ssh_password,
+        "remoteStateFile": remote_state_file,
+        "remoteInstallDir": remote_install_dir,
+        "safeAgentId": safe_agent_id,
+        "avatar": avatar,
+    }
+
+
+def _build_remote_agent_install_script(config: dict) -> str:
+    with open(os.path.join(ROOT_DIR, "office-agent-push.py"), "rb") as f:
+        script_b64 = base64.b64encode(f.read()).decode("ascii")
+
+    env_lines = {
+        "OFFICE_URL": config["officeUrl"],
+        "OFFICE_JOIN_KEY": config["joinKey"],
+        "OFFICE_AGENT_NAME": config["agentName"],
+        "OFFICE_OPENCLAW_AGENT_ID": config["openclawAgentId"],
+        "OFFICE_AGENT_AVATAR": config["avatar"],
+    }
+
+    exports = "\n".join(
+        f"export {key}={shlex.quote(str(value))}"
+        for key, value in env_lines.items()
+    )
+    safe_agent_id = shlex.quote(config["safeAgentId"])
+    return f"""set -e
+CLAWFFICE_AGENT_ID={safe_agent_id}
+INSTALL_DIR="$HOME/.clawffice/$CLAWFFICE_AGENT_ID"
+STATE_FILE="$INSTALL_DIR/state.json"
+mkdir -p "$INSTALL_DIR"
+if [ ! -f "$STATE_FILE" ]; then
+  NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date)"
+  cat > "$STATE_FILE" <<__CLAWFFICE_STATE__
+{{"state":"idle","detail":"대기 중","progress":0,"updated_at":"$NOW"}}
+__CLAWFFICE_STATE__
+fi
+base64 -d > "$INSTALL_DIR/office-agent-push.py" <<'__CLAWFFICE_SCRIPT__'
+{script_b64}
+__CLAWFFICE_SCRIPT__
+cat > "$INSTALL_DIR/office-agent.env" <<'__CLAWFFICE_ENV__'
+{exports}
+__CLAWFFICE_ENV__
+cat > "$INSTALL_DIR/run-office-agent.sh" <<'__CLAWFFICE_RUN__'
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+set -a
+. ./office-agent.env
+set +a
+export OFFICE_LOCAL_STATE_FILE="$(pwd)/state.json"
+exec python3 ./office-agent-push.py
+__CLAWFFICE_RUN__
+chmod 700 "$INSTALL_DIR"
+chmod 600 "$INSTALL_DIR/office-agent.env"
+chmod 700 "$INSTALL_DIR/run-office-agent.sh" "$INSTALL_DIR/office-agent-push.py"
+PID_FILE="$INSTALL_DIR/office-agent.pid"
+if [ -s "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" >/dev/null 2>&1; then
+  echo "already-running"
+else
+  nohup "$INSTALL_DIR/run-office-agent.sh" > "$INSTALL_DIR/office-agent.log" 2>&1 &
+  echo $! > "$PID_FILE"
+  echo "started"
+fi
+"""
+
+
 def _get_or_create_conversation(conn, agent_id: str, agent_name: str):
     now_iso = datetime.now().isoformat()
     row = conn.execute(
@@ -919,10 +1411,80 @@ def _insert_chat_message(conn, conversation_id: int, role: str, content: str, cr
     ).fetchone()
 
 
+def _chat_message_exists(conn, conversation_id: int, role: str, content: str, created_at: str):
+    row = conn.execute(
+        """
+        SELECT id
+        FROM messages
+        WHERE conversation_id = ?
+          AND role = ?
+          AND content = ?
+          AND created_at = ?
+        LIMIT 1
+        """,
+        (conversation_id, role, content, created_at),
+    ).fetchone()
+    return bool(row)
+
+
+def _is_imported_openclaw_user_message(content: str | None) -> bool:
+    text = (content or "").lstrip()
+    return text.startswith("Sender (untrusted metadata):")
+
+
+def _sync_openclaw_messages_for_conversation(conn, conversation_row):
+    agent_id = conversation_row["agent_id"]
+    openclaw_agent_id = _resolve_openclaw_agent_id(agent_id)
+    if not openclaw_agent_id:
+        return 0
+
+    session_key = _openclaw_session_key(agent_id, openclaw_agent_id)
+    records = _openclaw_message_records(session_key, openclaw_agent_id)
+    if not records:
+        return 0
+
+    latest_message = conn.execute(
+        """
+        SELECT created_at
+        FROM messages
+        WHERE conversation_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (conversation_row["id"],),
+    ).fetchone()
+    latest_ts = _iso_to_timestamp(latest_message["created_at"]) if latest_message else None
+    imported = 0
+    latest_imported_at = None
+    for record in records:
+        role = "agent" if record.get("role") == "assistant" else "user"
+        if role != "agent":
+            continue
+        content = str(record.get("text") or "").strip()
+        created_at = str(record.get("timestamp") or datetime.now().isoformat())
+        if not content:
+            continue
+        record_ts = _iso_to_timestamp(created_at)
+        if latest_ts is not None and record_ts is not None and record_ts <= latest_ts:
+            continue
+        if _chat_message_exists(conn, conversation_row["id"], role, content, created_at):
+            continue
+        _insert_chat_message(conn, conversation_row["id"], role, content, created_at)
+        imported += 1
+        latest_imported_at = created_at
+
+    if latest_imported_at:
+        conn.execute(
+            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+            (latest_imported_at, conversation_row["id"]),
+        )
+    return imported
+
+
 def _find_existing_agent_reply_for_user_message(conn, conversation_id: int, user_message_id: int):
     rows = conn.execute(
         """
-        SELECT id, role
+        SELECT id, role, content
         FROM messages
         WHERE conversation_id = ?
           AND id > ?
@@ -932,7 +1494,7 @@ def _find_existing_agent_reply_for_user_message(conn, conversation_id: int, user
     ).fetchall()
     for row in rows:
         role = str(row["role"] or "").lower()
-        if role == "user":
+        if role == "user" and not _is_imported_openclaw_user_message(row["content"]):
             return None
         if role == "agent":
             return row
@@ -1071,6 +1633,7 @@ def _recover_pending_chat_turns(conn, conversation_row):
             WHERE conversation_id = ?
               AND id > ?
               AND lower(role) = 'user'
+              AND content NOT LIKE 'Sender (untrusted metadata):%'
             ORDER BY id ASC
             LIMIT 1
             """,
@@ -1246,6 +1809,10 @@ def _conversation_messages_with_pending(conn, conversation_id: int, limit: int):
         _message_payload(row)
         for row in reversed(rows)
         if row["id"] not in suppressed_error_message_ids
+        and not (
+            str(row["role"] or "").lower() == "user"
+            and _is_imported_openclaw_user_message(row["content"])
+        )
     ]
     turn_rows = conn.execute(
         """
@@ -1882,6 +2449,7 @@ def get_chat_conversation():
         with chat_db_lock:
             with _chat_db() as conn:
                 conversation = _get_or_create_conversation(conn, agent_id, agent_name)
+                _sync_openclaw_messages_for_conversation(conn, conversation)
                 _recover_pending_chat_turns(conn, conversation)
                 _expire_stale_chat_turns(conn)
                 conversation = _get_or_create_conversation(conn, agent_id, agent_name)
@@ -2006,6 +2574,63 @@ def create_chat_message():
         return jsonify({"ok": False, "msg": str(e)}), 500
 
 
+@app.route("/agent-info", methods=["GET"])
+def get_agent_info():
+    try:
+        return jsonify(_agent_openclaw_info(request.args.get("agentId") or "star"))
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)}), 404
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+@app.route("/agent-info/thinking", methods=["POST"])
+def set_agent_thinking():
+    try:
+        data = request.get_json()
+        if not isinstance(data, dict):
+            return jsonify({"ok": False, "msg": "invalid json"}), 400
+        agent_id = str(data.get("agentId") or "star").strip() or "star"
+        openclaw_agent_id = _resolve_openclaw_agent_id(agent_id)
+        result = _set_openclaw_agent_thinking(openclaw_agent_id, data.get("thinking"))
+        return jsonify({"ok": True, "openclawAgentId": openclaw_agent_id, **result})
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+@app.route("/agent-info/model", methods=["POST"])
+def set_agent_model():
+    try:
+        data = request.get_json()
+        if not isinstance(data, dict):
+            return jsonify({"ok": False, "msg": "invalid json"}), 400
+        agent_id = str(data.get("agentId") or "star").strip() or "star"
+        openclaw_agent_id = _resolve_openclaw_agent_id(agent_id)
+        result = _set_openclaw_agent_model(openclaw_agent_id, data.get("model"))
+        return jsonify({"ok": True, "openclawAgentId": openclaw_agent_id, **result})
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+@app.route("/agent-info/context", methods=["POST"])
+def run_agent_context_action():
+    try:
+        data = request.get_json()
+        if not isinstance(data, dict):
+            return jsonify({"ok": False, "msg": "invalid json"}), 400
+        agent_id = str(data.get("agentId") or "star").strip() or "star"
+        result = _run_openclaw_context_action(agent_id, data.get("action"))
+        return jsonify({"ok": True, **result})
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
 @app.route("/agents", methods=["GET"])
 def get_agents():
     """Get full agents list (for multi-agent UI), with auto-cleanup on access"""
@@ -2058,6 +2683,11 @@ def get_agents():
 
     with chat_db_lock:
         with _chat_db() as conn:
+            for agent in cleaned_agents:
+                if not agent.get("agentId"):
+                    continue
+                conversation = _get_or_create_conversation(conn, agent.get("agentId"), agent.get("name") or agent.get("agentId"))
+                _sync_openclaw_messages_for_conversation(conn, conversation)
             unread_by_agent = _conversation_unread_map(conn)
     response_agents = []
     for agent in cleaned_agents:
@@ -2130,6 +2760,107 @@ def agent_reject():
         return jsonify({"ok": False, "msg": str(e)}), 500
 
 
+@app.route("/remote-agent/hosts", methods=["GET"])
+def remote_agent_hosts():
+    """Return previously used remote SSH hosts for the add-agent UI."""
+    try:
+        hosts = []
+        seen = set()
+        for agent in load_agents_state():
+            host = str(agent.get("remoteHost") or "").strip()
+            if not host or host in seen:
+                continue
+            seen.add(host)
+            hosts.append({
+                "host": host,
+                "sshUser": agent.get("remoteSshUser") or "",
+                "sshPort": agent.get("remoteSshPort") or 22,
+                "remoteStateFile": agent.get("remoteStateFile") or "",
+                "remoteInstallDir": agent.get("remoteInstallDir") or "",
+                "lastUsedAt": agent.get("updated_at") or agent.get("lastPushAt") or "",
+            })
+        hosts.sort(key=lambda item: item.get("lastUsedAt") or "", reverse=True)
+        return jsonify({"ok": True, "hosts": hosts})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+@app.route("/remote-agent/install", methods=["POST"])
+def install_remote_agent():
+    """Install and start office-agent-push.py on a remote OpenClaw host over SSH."""
+    try:
+        data = request.get_json()
+        if not isinstance(data, dict):
+            return jsonify({"ok": False, "msg": "invalid json"}), 400
+        config = _remote_install_payload(data)
+        remote_script = _build_remote_agent_install_script(config)
+        cmd = _remote_install_ssh_command(
+            config["host"],
+            config["sshUser"],
+            config["sshPort"],
+            config["sshKeyPath"],
+            config["sshPassword"],
+        )
+        result = subprocess.run(
+            cmd,
+            input=remote_script,
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+        stdout = (result.stdout or "").strip()
+        stderr = (result.stderr or "").strip()
+        if result.returncode != 0:
+            detail = stderr or stdout or "unknown error"
+            return jsonify({"ok": False, "msg": f"원격 설치 실패({result.returncode}): {detail[-1200:]}"}), 502
+        status = "already-running" if "already-running" in stdout else "started"
+        now_iso = datetime.now().isoformat()
+        agents = load_agents_state()
+        existing = next((a for a in agents if not a.get("isMain") and a.get("name") == config["agentName"]), None)
+        metadata_target = existing
+        if not metadata_target:
+            import random
+            import string
+            metadata_target = {
+                "agentId": "agent_pending_" + str(int(datetime.now().timestamp() * 1000)) + "_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=4)),
+                "name": config["agentName"],
+                "isMain": False,
+                "state": "idle",
+                "detail": "원격 설치를 시작했습니다",
+                "updated_at": now_iso,
+                "area": "breakroom",
+                "source": "remote-openclaw",
+                "joinKey": config["joinKey"],
+                "authStatus": "offline",
+                "authExpiresAt": None,
+                "lastPushAt": None,
+            }
+            agents.append(metadata_target)
+        metadata_target["remoteHost"] = config["host"]
+        metadata_target["remoteSshUser"] = config["sshUser"]
+        metadata_target["remoteSshPort"] = config["sshPort"]
+        metadata_target["remoteStateFile"] = config["remoteStateFile"]
+        metadata_target["remoteInstallDir"] = config["remoteInstallDir"]
+        metadata_target["openclawAgentId"] = config["openclawAgentId"]
+        metadata_target["avatar"] = config["avatar"]
+        metadata_target["updated_at"] = now_iso
+        save_agents_state(agents)
+        return jsonify({
+            "ok": True,
+            "status": status,
+            "host": config["host"],
+            "installDir": config["remoteInstallDir"],
+            "logFile": f"{config['remoteInstallDir'].rstrip('/')}/office-agent.log",
+            "msg": "이미 실행 중입니다" if status == "already-running" else "원격 agent 푸시를 시작했습니다",
+        })
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)}), 400
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "msg": "SSH 원격 설치 시간이 초과되었습니다"}), 504
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
 @app.route("/join-agent", methods=["POST"])
 def join_agent():
     """Add a new agent with one-time join key validation and pending auth"""
@@ -2148,6 +2879,12 @@ def join_agent():
             or data.get("openclawAgent")
             or ""
         ).strip()
+        avatar = _normalize_guest_avatar(data.get("avatar"))
+        remote_host = str(data.get("remoteHost") or "").strip()
+        remote_ssh_user = str(data.get("remoteSshUser") or "").strip()
+        remote_ssh_port = data.get("remoteSshPort") or None
+        remote_state_file = str(data.get("remoteStateFile") or "").strip()
+        remote_install_dir = str(data.get("remoteInstallDir") or "").strip()
 
         # Normalize state early for compatibility
         state = normalize_agent_state(state)
@@ -2184,7 +2921,6 @@ def join_agent():
             # 在线判定：lastPushAt/updated_at 在 5 分钟内；否则视为 offline，不计入并发。
             now = datetime.now()
             existing = next((a for a in agents if a.get("name") == name and not a.get("isMain")), None)
-            existing_id = existing.get("agentId") if existing else None
 
             def _age_seconds(dt_str):
                 if not dt_str:
@@ -2216,13 +2952,26 @@ def join_agent():
                 existing["joinKey"] = join_key
                 if openclaw_agent_id:
                     existing["openclawAgentId"] = openclaw_agent_id
+                existing["avatar"] = avatar
+                if remote_host:
+                    existing["remoteHost"] = remote_host
+                if remote_ssh_user:
+                    existing["remoteSshUser"] = remote_ssh_user
+                if remote_ssh_port:
+                    existing["remoteSshPort"] = remote_ssh_port
+                if remote_state_file:
+                    existing["remoteStateFile"] = remote_state_file
+                if remote_install_dir:
+                    existing["remoteInstallDir"] = remote_install_dir
                 existing["authStatus"] = "approved"
                 existing["authApprovedAt"] = datetime.now().isoformat()
                 existing["authExpiresAt"] = (datetime.now() + timedelta(hours=24)).isoformat()
                 existing["lastPushAt"] = datetime.now().isoformat()  # join 视为上线，纳入并发/离线判定
-                if not existing.get("avatar"):
+                existing_id = str(existing.get("agentId") or "")
+                if existing_id.startswith("agent_pending_"):
                     import random
-                    existing["avatar"] = random.choice(["guest_role_1", "guest_role_2", "guest_role_3", "guest_role_4", "guest_role_5", "guest_role_6"])
+                    import string
+                    existing["agentId"] = "agent_" + str(int(datetime.now().timestamp() * 1000)) + "_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
                 agent_id = existing.get("agentId")
             else:
                 # Use ms + random suffix to avoid collisions under concurrent joins
@@ -2243,10 +2992,20 @@ def join_agent():
                     "authApprovedAt": datetime.now().isoformat(),
                     "authExpiresAt": (datetime.now() + timedelta(hours=24)).isoformat(),
                     "lastPushAt": datetime.now().isoformat(),
-                    "avatar": random.choice(["guest_role_1", "guest_role_2", "guest_role_3", "guest_role_4", "guest_role_5", "guest_role_6"])
+                    "avatar": avatar
                 }
                 if openclaw_agent_id:
                     new_agent["openclawAgentId"] = openclaw_agent_id
+                if remote_host:
+                    new_agent["remoteHost"] = remote_host
+                if remote_ssh_user:
+                    new_agent["remoteSshUser"] = remote_ssh_user
+                if remote_ssh_port:
+                    new_agent["remoteSshPort"] = remote_ssh_port
+                if remote_state_file:
+                    new_agent["remoteStateFile"] = remote_state_file
+                if remote_install_dir:
+                    new_agent["remoteInstallDir"] = remote_install_dir
                 agents.append(new_agent)
 
             key_item["used"] = True
@@ -2317,6 +3076,13 @@ def leave_agent():
 def get_status():
     """Get current main state (backward compatibility). Optionally include officeName from IDENTITY.md."""
     state = load_state()
+    try:
+        main_agent = next((a for a in load_agents_state() if a.get("isMain")), None)
+        state.setdefault("agentId", (main_agent or {}).get("agentId") or "star")
+        state.setdefault("agentName", (main_agent or {}).get("name") or "Star")
+    except Exception:
+        state.setdefault("agentId", "star")
+        state.setdefault("agentName", "Star")
     office_name = get_office_name_from_identity()
     if office_name:
         state["officeName"] = office_name
@@ -2351,6 +3117,7 @@ def agent_push():
             or data.get("openclawAgent")
             or ""
         ).strip()
+        avatar = _normalize_guest_avatar(data.get("avatar")) if data.get("avatar") else ""
 
         if not agent_id or not join_key or not state:
             return jsonify({"ok": False, "msg": "agentId/joinKey/state가 없습니다"}), 400
@@ -2438,6 +3205,8 @@ def agent_push():
         target["source"] = "remote-openclaw"
         if openclaw_agent_id:
             target["openclawAgentId"] = openclaw_agent_id
+        if avatar:
+            target["avatar"] = avatar
         target["lastPushAt"] = datetime.now().isoformat()
 
         save_agents_state(agents)
@@ -2451,7 +3220,7 @@ def health():
     """Health check"""
     return jsonify({
         "status": "ok",
-        "service": "star-office-ui",
+        "service": "clawffice",
         "timestamp": datetime.now().isoformat(),
     })
 
@@ -3281,7 +4050,7 @@ def assets_upload():
 
 
 if __name__ == "__main__":
-    raw_port = os.environ.get("STAR_BACKEND_PORT", "19000")
+    raw_port = os.environ.get("CLAWFFICE_BACKEND_PORT") or os.environ.get("STAR_BACKEND_PORT", "19000")
     try:
         backend_port = int(raw_port)
     except ValueError:
@@ -3290,14 +4059,14 @@ if __name__ == "__main__":
         backend_port = 19000
 
     print("=" * 50)
-    print("Star Office UI - Backend State Service")
+    print("clawffice - Backend State Service")
     print("=" * 50)
     print(f"State file: {STATE_FILE}")
     print(f"Listening on: http://0.0.0.0:{backend_port}")
     if backend_port != 19000:
-        print(f"(Port override: set STAR_BACKEND_PORT to change; current: {raw_port})")
+        print(f"(Port override: set CLAWFFICE_BACKEND_PORT to change; current: {raw_port})")
     else:
-        print("(Set STAR_BACKEND_PORT to use a different port, e.g. 3009)")
+        print("(Set CLAWFFICE_BACKEND_PORT to use a different port, e.g. 3009)")
     mode = "production" if is_production_mode() else "development"
     print(f"Mode: {mode}")
     if is_production_mode():
@@ -3305,7 +4074,7 @@ if __name__ == "__main__":
     else:
         weak_flags = []
         if not is_strong_secret(str(app.secret_key)):
-            weak_flags.append("weak FLASK_SECRET_KEY/STAR_OFFICE_SECRET")
+            weak_flags.append("weak FLASK_SECRET_KEY/CLAWFFICE_SECRET")
         if not is_strong_drawer_pass(ASSET_DRAWER_PASS_DEFAULT):
             weak_flags.append("weak ASSET_DRAWER_PASS")
         if weak_flags:

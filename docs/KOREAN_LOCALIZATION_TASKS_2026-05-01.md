@@ -1,4 +1,4 @@
-# Star Office UI Korean Localization Checklist
+# clawffice Korean Localization Checklist
 
 Date: 2026-05-01
 

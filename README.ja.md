@@ -1,8 +1,8 @@
-# Star Office UI
+# Clawffice🦞
 
 🌐 Language: [中文](./README_cn.md) | [English](./README.md) | [한국어](./README_ko.md) | **日本語**
 
-![Star Office UI カバー](docs/screenshots/readme-cover-2.jpg)
+![Clawffice🦞 カバー](docs/screenshots/readme-cover-2.jpg)
 
 **ピクセルアート風 AI オフィスダッシュボード** —— AI アシスタントの作業状態をリアルタイムで可視化し、「誰が何をしているか」「昨日何をしたか」「今オンラインか」を直感的に把握できます。
 
@@ -21,8 +21,8 @@
 [OpenClaw](https://github.com/openclaw/openclaw) をご利用中なら、以下のメッセージをロブスターに送るだけ：
 
 ```text
-この SKILL.md に従って Star Office UI をデプロイしてください：
-https://github.com/ringhyacinth/Star-Office-UI/blob/master/SKILL.md
+この SKILL.md に従って Clawffice🦞 をデプロイしてください：
+https://github.com/ringhyacinth/clawffice/blob/master/SKILL.md
 ```
 
 ロブスターが自動的にリポジトリのクローン、依存関係のインストール、バックエンドの起動、ステータス同期の設定を行い、アクセス URL をお知らせします。
@@ -33,8 +33,8 @@ https://github.com/ringhyacinth/Star-Office-UI/blob/master/SKILL.md
 
 ```bash
 # 1) リポジトリをクローン
-git clone https://github.com/ringhyacinth/Star-Office-UI.git
-cd Star-Office-UI
+git clone https://github.com/ringhyacinth/clawffice.git
+cd clawffice
 
 # 2) 依存関係をインストール（Python 3.10+ が必要）
 python3 -m pip install -r backend/requirements.txt
@@ -55,7 +55,7 @@ python3 set_state.py error "問題を検出、調査中"
 python3 set_state.py idle "待機中"
 ```
 
-![Star Office UI プレビュー](docs/screenshots/readme-cover-1.jpg)
+![Clawffice🦞 プレビュー](docs/screenshots/readme-cover-1.jpg)
 
 ---
 
@@ -92,7 +92,7 @@ python3 set_state.py idle "待機中"
 ### 1) 依存関係インストール
 
 ```bash
-cd Star-Office-UI
+cd clawffice
 python3 -m pip install -r backend/requirements.txt
 ```
 
@@ -149,7 +149,7 @@ python3 scripts/smoke_test.py --base-url http://127.0.0.1:19000
 `SOUL.md`（またはエージェント設定ファイル）に以下のルールを追加すると、Agent がステータスを自動で更新します：
 
 ```markdown
-## Star Office ステータス同期ルール
+## Clawffice🦞 ステータス同期ルール
 - タスク開始時：`python3 set_state.py <状態> "<説明>"` を実行してから作業開始
 - タスク完了時：`python3 set_state.py idle "待機中"` を実行してから返答
 ```
@@ -266,7 +266,7 @@ npm run dev
 ## 📁 プロジェクト構成
 
 ```text
-Star-Office-UI/
+clawffice/
 ├── backend/            # Flask バックエンド
 │   ├── app.py
 │   ├── requirements.txt
@@ -291,4 +291,4 @@ Star-Office-UI/
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/image?repos=ringhyacinth/Star-Office-UI&type=date&legend=top-left)](https://www.star-history.com/?repos=ringhyacinth%2FStar-Office-UI&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/image?repos=ringhyacinth/clawffice&type=date&legend=top-left)](https://www.star-history.com/?repos=ringhyacinth%2Fclawffice&type=date&legend=top-left)

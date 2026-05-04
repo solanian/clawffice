@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Memo extraction helpers for Star Office backend.
+"""Memo extraction helpers for clawffice backend.
 
 Reads and sanitizes daily memo content from memory/*.md for the yesterday-memo API.
 """

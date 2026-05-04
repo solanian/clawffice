@@ -1,8 +1,8 @@
-# Star Office UI
+# Clawffice🦞
 
 🌐 Language: [中文](./README_cn.md) | [English](./README.md) | **한국어** | [日本語](./README.ja.md)
 
-![Star Office UI Cover](docs/screenshots/readme-cover-2.jpg)
+![Clawffice🦞 Cover](docs/screenshots/readme-cover-2.jpg)
 
 **픽셀 아트 스타일의 AI 오피스 대시보드**입니다. AI agent가 지금 어떤 상태인지, 누가 무엇을 하고 있는지, 어제 어떤 작업을 했는지 한눈에 볼 수 있습니다.
 
@@ -17,8 +17,8 @@
 ### 1. Docker로 실행
 
 ```bash
-git clone https://github.com/ringhyacinth/Star-Office-UI.git
-cd Star-Office-UI
+git clone https://github.com/ringhyacinth/clawffice.git
+cd clawffice
 cp .env.example .env
 docker compose up --build
 ```
@@ -30,8 +30,8 @@ docker compose up --build
 > Python 3.10 이상이 필요합니다.
 
 ```bash
-git clone https://github.com/ringhyacinth/Star-Office-UI.git
-cd Star-Office-UI
+git clone https://github.com/ringhyacinth/clawffice.git
+cd clawffice
 python3 -m pip install -r backend/requirements.txt
 cp state.sample.json state.json
 cd backend
@@ -62,10 +62,10 @@ python3 set_state.py idle "대기 중"
 
 ## OpenClaw 연동
 
-OpenClaw agent 규칙 파일에 다음 흐름을 추가하면 작업 상태가 Star Office UI에 자동으로 반영됩니다.
+OpenClaw agent 규칙 파일에 다음 흐름을 추가하면 작업 상태가 Clawffice🦞에 자동으로 반영됩니다.
 
 ```markdown
-## Star Office 상태 동기화
+## Clawffice🦞 상태 동기화
 - 작업 시작 전: `python3 set_state.py <state> "<설명>"` 실행
 - 작업 완료 후: `python3 set_state.py idle "대기 중"` 실행
 ```

@@ -37,5 +37,5 @@ def resize_map(input_path, output_path, target_short_edge=600):
 
 if __name__ == "__main__":
     input_path = "/root/.openclaw/media/inbound/6b352c7d-f09f-4dd7-9916-a312fb60122b.png"
-    output_path = "/root/.openclaw/workspace/star-office-ui/frontend/office_bg.png"
+    output_path = "/root/.openclaw/workspace/clawffice/frontend/office_bg.png"
     resize_map(input_path, output_path, target_short_edge=720)

@@ -1,8 +1,8 @@
-# Star Office UI
+# Clawffice🦞
 
 🌐 Language: [中文](./README_cn.md) | **English** | [한국어](./README_ko.md) | [日本語](./README.ja.md)
 
-![Star Office UI Cover](docs/screenshots/readme-cover-2.jpg)
+![Clawffice🦞 Cover](docs/screenshots/readme-cover-2.jpg)
 
 **A pixel-art AI office dashboard** — visualize your AI assistant's work status in real time, so you can see at a glance who's doing what, what they did yesterday, and whether they're online.
 
@@ -21,8 +21,8 @@ Best experienced with [OpenClaw](https://github.com/openclaw/openclaw), but also
 If you're using [OpenClaw](https://github.com/openclaw/openclaw), just send this to your lobster:
 
 ```text
-Please follow this SKILL.md to deploy Star Office UI for me:
-https://github.com/ringhyacinth/Star-Office-UI/blob/master/SKILL.md
+Please follow this SKILL.md to deploy Clawffice🦞 for me:
+https://github.com/ringhyacinth/clawffice/blob/master/SKILL.md
 ```
 
 Your lobster will automatically clone the repo, install dependencies, start the backend, configure status sync, and send you the access URL.
@@ -33,8 +33,8 @@ Your lobster will automatically clone the repo, install dependencies, start the 
 
 ```bash
 # 1) Clone the repo
-git clone https://github.com/ringhyacinth/Star-Office-UI.git
-cd Star-Office-UI
+git clone https://github.com/ringhyacinth/clawffice.git
+cd clawffice
 
 # 2) Install dependencies (Python 3.10+ required)
 python3 -m pip install -r backend/requirements.txt
@@ -55,7 +55,7 @@ python3 set_state.py error "Found an issue, debugging"
 python3 set_state.py idle "Standing by"
 ```
 
-![Star Office UI Preview](docs/screenshots/readme-cover-1.jpg)
+![Clawffice🦞 Preview](docs/screenshots/readme-cover-1.jpg)
 
 ---
 
@@ -92,7 +92,7 @@ You can still deploy and use it. You can:
 ### 1) Install dependencies
 
 ```bash
-cd Star-Office-UI
+cd clawffice
 python3 -m pip install -r backend/requirements.txt
 ```
 
@@ -149,7 +149,7 @@ If all checks report `OK`, your deployment is good to go.
 Add the following rule to your `SOUL.md` (or agent config) so your agent updates its status automatically:
 
 ```markdown
-## Star Office Status Sync Rules
+## Clawffice🦞 Status Sync Rules
 - When starting a task: run `python3 set_state.py <state> "<description>"` before beginning work
 - When finishing a task: run `python3 set_state.py idle "Standing by"` before replying
 ```
@@ -266,7 +266,7 @@ Please keep attribution when redistributing or demoing, and follow the original 
 ## 📁 Project Structure
 
 ```text
-Star-Office-UI/
+clawffice/
 ├── backend/            # Flask backend
 │   ├── app.py
 │   ├── requirements.txt
@@ -291,4 +291,4 @@ Star-Office-UI/
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/image?repos=ringhyacinth/Star-Office-UI&type=date&legend=top-left)](https://www.star-history.com/?repos=ringhyacinth%2FStar-Office-UI&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/image?repos=ringhyacinth/clawffice&type=date&legend=top-left)](https://www.star-history.com/?repos=ringhyacinth%2Fclawffice&type=date&legend=top-left)

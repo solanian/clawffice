@@ -3,9 +3,9 @@ const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const net = require("net");
-const APP_NAME = "Star Office UI";
-const BACKEND_HOST = process.env.STAR_BACKEND_HOST || "127.0.0.1";
-const rawBackendPort = Number(process.env.STAR_BACKEND_PORT || 19000);
+const APP_NAME = "clawffice";
+const BACKEND_HOST = process.env.CLAWFFICE_BACKEND_HOST || process.env.STAR_BACKEND_HOST || "127.0.0.1";
+const rawBackendPort = Number(process.env.CLAWFFICE_BACKEND_PORT || process.env.STAR_BACKEND_PORT || 19000);
 const BACKEND_PORT = Number.isFinite(rawBackendPort) && rawBackendPort > 0 ? rawBackendPort : 19000;
 const BACKEND_BASE_URL = `http://${BACKEND_HOST}:${BACKEND_PORT}`;
 
@@ -68,10 +68,10 @@ function findProjectRoot() {
 
   const home = process.env.HOME || "";
   const candidates = [
-    path.join(home, "Documents", "GitHub", "Star-Office-UI"),
-    path.join(home, "GitHub", "Star-Office-UI"),
-    path.join(home, "Documents", "Star-Office-UI"),
-    path.join(home, "Star-Office-UI"),
+    path.join(home, "Documents", "GitHub", "clawffice"),
+    path.join(home, "GitHub", "clawffice"),
+    path.join(home, "Documents", "clawffice"),
+    path.join(home, "clawffice"),
   ];
   for (const c of candidates) {
     if (fs.existsSync(path.join(c, "backend", "app.py"))) return c;
@@ -158,6 +158,7 @@ function spawnBackend(projectRoot) {
   }
 
   const candidates = [];
+  if (process.env.CLAWFFICE_BACKEND_PYTHON) candidates.push(process.env.CLAWFFICE_BACKEND_PYTHON);
   if (process.env.STAR_BACKEND_PYTHON) candidates.push(process.env.STAR_BACKEND_PYTHON);
   candidates.push(path.join(projectRoot, ".venv", "bin", "python"));
   candidates.push("python3");
@@ -321,7 +322,7 @@ function createWindows(projectRoot) {
       nodeIntegration: false,
     },
   });
-  miniWindow.setTitle("Star Office UI Mini");
+  miniWindow.setTitle("clawffice Mini");
 
   const v = Date.now();
   const mainUrl = `${BACKEND_BASE_URL}/electron-standalone?desktop=1&v=${v}`;

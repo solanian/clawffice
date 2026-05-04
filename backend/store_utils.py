@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Storage helper utilities for Star Office backend.
+"""Storage helper utilities for clawffice backend.
 
 JSON load/save for agents state, asset positions/defaults, runtime config, and join keys.
 """

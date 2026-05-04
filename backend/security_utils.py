@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Security helper utilities for Star Office backend.
+"""Security helper utilities for clawffice backend.
 
 Production detection and validation for Flask secret and asset drawer password.
 """
@@ -10,8 +10,8 @@ import os
 
 
 def is_production_mode() -> bool:
-    """Return True if STAR_OFFICE_ENV or FLASK_ENV is prod/production."""
-    env = (os.getenv("STAR_OFFICE_ENV") or os.getenv("FLASK_ENV") or "").strip().lower()
+    """Return True if CLAWFFICE_ENV or FLASK_ENV is prod/production."""
+    env = (os.getenv("CLAWFFICE_ENV") or os.getenv("STAR_OFFICE_ENV") or os.getenv("FLASK_ENV") or "").strip().lower()
     return env in {"prod", "production"}
 
 

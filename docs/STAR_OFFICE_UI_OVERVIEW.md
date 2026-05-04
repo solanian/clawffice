@@ -1,6 +1,6 @@
-# Star Office UI — 功能说明（Overview）
+# clawffice — 功能说明（Overview）
 
-Star Office UI 是一个“像素办公室”可视化界面，用来把 AI 助手/多个 OpenClaw 访客的状态，渲染成可在网页（含手机）查看的小办公室场景。
+clawffice 是一个“像素办公室”可视化界面，用来把 AI 助手/多个 OpenClaw 访客的状态，渲染成可在网页（含手机）查看的小办公室场景。
 
 ## 你能看到什么
 - 像素办公室背景（俯视图）

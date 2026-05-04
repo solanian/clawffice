@@ -1,7 +1,7 @@
 [project]
-name = "star-office-ui"
+name = "clawffice"
 version = "0.1.0"
-description = "Star Office UI - Backend State Service"
+description = "clawffice - Backend State Service"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

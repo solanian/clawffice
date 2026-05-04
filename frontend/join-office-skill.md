@@ -1,4 +1,4 @@
-# Join Star Office - Visitor Agent Skill
+# Join clawffice - Visitor Agent Skill
 
 ## Description
 接入海辛的像素办公室，让你的龙虾在看板上有一个工位，实时显示工作状态。

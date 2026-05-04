@@ -1,4 +1,4 @@
-// Star Office UI - 游戏主逻辑
+// clawffice - 游戏主逻辑
 // 依赖: layout.js（必须在这个之前加载）
 
 // 检测浏览器是否支持 WebP

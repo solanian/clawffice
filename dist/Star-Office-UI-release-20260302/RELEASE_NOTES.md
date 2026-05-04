@@ -1,4 +1,4 @@
-# Star-Office-UI Release Notes (2026-03-02)
+# clawffice Release Notes (2026-03-02)
 
 ## Summary
 This package is a cleaned release snapshot for handoff/update.
@@ -22,7 +22,7 @@ It excludes runtime files, logs, and local backup artifacts.
 - runtime state files: state.json / agents-state.json / join-keys.json
 
 ## Artifact
-- File: `dist/Star-Office-UI-release-20260302.tgz`
+- File: `dist/clawffice-release-20260302.tgz`
 - SHA256: `bf52147b7664adc3c457eadd3748f969b1ad5ee7e8d3059ce9c8da4c6030f6ae`
 
 ## Pre-publish checklist

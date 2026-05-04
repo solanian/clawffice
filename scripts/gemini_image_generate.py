@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Gemini Image Generate - CLI for Star Office UI background generation.
+"""Gemini Image Generate - CLI for clawffice background generation.
 
 Calls Google's Gemini API to generate images, with optional reference image
 for style transfer / layout preservation.
 
-Expected interface (called by Star Office UI backend):
+Expected interface (called by clawffice backend):
   python gemini_image_generate.py \
     --prompt "..." \
     --model <model_name> \

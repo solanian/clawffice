@@ -1,8 +1,8 @@
-# Star Office UI
+# Clawffice🦞
 
 🌐 Language: **中文** | [English](./README.md) | [한국어](./README_ko.md) | [日本語](./README.ja.md)
 
-![Star Office UI 封面](docs/screenshots/readme-cover-2.jpg)
+![Clawffice🦞 封面](docs/screenshots/readme-cover-2.jpg)
 
 **一个像素风格的 AI 办公室看板** —— 把 AI 助手的工作状态实时可视化，让你直观看到"谁在做什么、昨天做了什么、现在是否在线"。
 
@@ -21,8 +21,8 @@
 如果你正在使用 [OpenClaw](https://github.com/openclaw/openclaw)，直接把下面这句话发给你的龙虾：
 
 ```text
-请按照这个 SKILL.md 帮我完成 Star Office UI 的部署：
-https://github.com/ringhyacinth/Star-Office-UI/blob/master/SKILL.md
+请按照这个 SKILL.md 帮我完成 Clawffice🦞 的部署：
+https://github.com/ringhyacinth/clawffice/blob/master/SKILL.md
 ```
 
 龙虾会自动完成 clone、安装依赖、启动后端、配置状态同步，并把访问地址发给你。
@@ -33,8 +33,8 @@ https://github.com/ringhyacinth/Star-Office-UI/blob/master/SKILL.md
 
 ```bash
 # 1) 下载仓库
-git clone https://github.com/ringhyacinth/Star-Office-UI.git
-cd Star-Office-UI
+git clone https://github.com/ringhyacinth/clawffice.git
+cd clawffice
 
 # 2) 安装依赖（需要 Python 3.10+）
 python3 -m pip install -r backend/requirements.txt
@@ -55,7 +55,7 @@ python3 set_state.py error "发现问题，排查中"
 python3 set_state.py idle "待命中"
 ```
 
-![Star Office UI 预览](docs/screenshots/readme-cover-1.jpg)
+![Clawffice🦞 预览](docs/screenshots/readme-cover-1.jpg)
 
 ---
 
@@ -93,7 +93,7 @@ python3 set_state.py idle "待命中"
 ### 1) 安装依赖
 
 ```bash
-cd Star-Office-UI
+cd clawffice
 python3 -m pip install -r backend/requirements.txt
 ```
 
@@ -150,7 +150,7 @@ python3 scripts/smoke_test.py --base-url http://127.0.0.1:19000
 在你的 `SOUL.md`（或 Agent 规则文件）中加入以下规则，让 Agent 自觉维护状态：
 
 ```markdown
-## Star Office 状态同步规则
+## Clawffice🦞 状态同步规则
 - 接到任务时：先执行 `python3 set_state.py <状态> "<描述>"` 再开始工作
 - 完成任务后：执行 `python3 set_state.py idle "待命中"` 再回复
 ```
@@ -267,7 +267,7 @@ npm run dev
 ## 📁 项目结构
 
 ```text
-Star-Office-UI/
+clawffice/
 ├── backend/            # Flask 后端
 │   ├── app.py
 │   ├── requirements.txt
@@ -292,4 +292,4 @@ Star-Office-UI/
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/image?repos=ringhyacinth/Star-Office-UI&type=date&legend=top-left)](https://www.star-history.com/?repos=ringhyacinth%2FStar-Office-UI&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/image?repos=ringhyacinth/clawffice&type=date&legend=top-left)](https://www.star-history.com/?repos=ringhyacinth%2Fclawffice&type=date&legend=top-left)

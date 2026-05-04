@@ -3,13 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Star Office UI</title>
+    <title>Clawffice🦞</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={{VERSION_TIMESTAMP}}">
+    <link rel="preload" href="/static/fonts/ark-pixel-12px-proportional-latin.ttf.woff2?v={{VERSION_TIMESTAMP}}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/static/fonts/ark-pixel-12px-proportional-ko.ttf.woff2?v={{VERSION_TIMESTAMP}}" as="font" type="font/woff2" crossorigin>
     <style>
         @font-face {
             font-family: 'ArkPixel';
-            src: url('/static/fonts/ark-pixel-12px-proportional-ko.ttf.woff2') format('woff2');
+            src: url('/static/fonts/ark-pixel-12px-proportional-latin.ttf.woff2?v={{VERSION_TIMESTAMP}}') format('woff2');
             font-weight: normal;
             font-style: normal;
+            font-display: block;
+            unicode-range: U+0000-00FF, U+0100-024F, U+2000-206F, U+20A0-20CF;
+        }
+        @font-face {
+            font-family: 'ArkPixel';
+            src: url('/static/fonts/ark-pixel-12px-proportional-ko.ttf.woff2?v={{VERSION_TIMESTAMP}}') format('woff2');
+            font-weight: normal;
+            font-style: normal;
+            font-display: block;
+            unicode-range: U+1100-11FF, U+3130-318F, U+AC00-D7AF, U+A960-A97F, U+D7B0-D7FF;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -74,6 +87,26 @@
             background: #101421;
             padding: 16px;
             overflow-y: auto;
+        }
+        .agents-add-btn {
+            width: 100%;
+            min-height: 70px;
+            margin-top: 10px;
+            border: 2px dashed #475569;
+            background: #171d2d;
+            color: #ffd166;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'ArkPixel', 'Courier New', monospace;
+            font-size: 28px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .agents-add-btn:hover {
+            border-color: #ffd166;
+            background: #263047;
         }
         .agents-card-list {
             display: grid;
@@ -186,6 +219,400 @@
             padding: 28px 0;
             text-align: center;
             font-size: 13px;
+        }
+        .agent-info-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 9000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(4, 7, 15, 0.72);
+        }
+        .agent-info-modal[hidden] {
+            display: none !important;
+        }
+        .agent-info-panel {
+            width: min(760px, 100%);
+            max-height: min(760px, calc(100vh - 32px));
+            overflow-y: auto;
+            background: #101421;
+            border: 2px solid #334155;
+            border-radius: 6px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+            padding: 14px;
+        }
+        .agent-info-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .agent-info-title {
+            min-width: 0;
+            color: #ffd166;
+            font-size: 17px;
+            line-height: 1.25;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .agent-info-close {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #475569;
+            background: #111827;
+            color: #f8fafc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'ArkPixel', 'Courier New', monospace;
+            font-size: 18px;
+        }
+        .agent-info-layout {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 14px;
+            align-items: start;
+        }
+        .agent-info-profile {
+            display: grid;
+            gap: 8px;
+            justify-items: center;
+        }
+        .agent-info-avatar {
+            width: 128px;
+            height: 128px;
+            border: 2px solid #334155;
+            background: #0b1020;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: contain;
+            border-radius: 8px;
+            overflow: hidden;
+            image-rendering: pixelated;
+        }
+        .agent-info-avatar-main {
+            background-image: url('/static/star-idle-v5.png?v={{VERSION_TIMESTAMP}}');
+            background-size: 800% 600%;
+            background-position: 0 0;
+        }
+        .agent-info-avatar-guest img {
+            width: 400%;
+            height: 200%;
+            max-width: none;
+            object-fit: fill;
+            image-rendering: pixelated;
+        }
+        .agent-info-profile-meta {
+            width: 100%;
+            display: grid;
+            gap: 5px;
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.35;
+            word-break: break-word;
+        }
+        .agent-info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .agent-info-item {
+            min-width: 0;
+            padding: 8px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            border-radius: 5px;
+        }
+        .agent-info-label {
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
+        .agent-info-value {
+            color: #f8fafc;
+            font-size: 13px;
+            line-height: 1.35;
+            word-break: break-word;
+        }
+        .agent-info-status {
+            color: #94a3b8;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        .agent-info-status.error {
+            color: #fca5a5;
+        }
+        .agent-info-control {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .agent-info-control select {
+            min-width: 0;
+            flex: 1 1 auto;
+            height: 30px;
+            border: 1px solid #475569;
+            background: #0b1020;
+            color: #f8fafc;
+            border-radius: 4px;
+            font-family: 'ArkPixel', 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .agent-info-control button {
+            height: 30px;
+            padding: 0 9px;
+            border: 1px solid #475569;
+            background: #111827;
+            color: #f8fafc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'ArkPixel', 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .agent-info-control button:hover {
+            border-color: #ffd166;
+            background: #263047;
+        }
+        .agent-info-control button.danger {
+            border-color: #7f1d1d;
+            color: #fecaca;
+        }
+        .agent-info-control button.danger:hover {
+            border-color: #f87171;
+            background: #3f1d24;
+        }
+        .agent-info-context-line {
+            margin-bottom: 7px;
+        }
+        .remote-agent-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 9000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(4, 7, 15, 0.72);
+        }
+        .remote-agent-modal[hidden] {
+            display: none !important;
+        }
+        .remote-agent-panel {
+            width: min(720px, 100%);
+            max-height: min(760px, calc(100vh - 32px));
+            overflow-y: auto;
+            background: #101421;
+            border: 2px solid #334155;
+            border-radius: 6px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+            padding: 14px;
+        }
+        .remote-agent-header {
+            position: relative;
+            display: grid;
+            justify-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+            padding-top: 2px;
+        }
+        .remote-agent-heading {
+            width: 100%;
+            display: grid;
+            justify-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+        .remote-agent-title {
+            color: #ffd166;
+            font-size: 17px;
+            line-height: 1.25;
+            text-align: center;
+        }
+        .remote-agent-close {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 30px;
+            height: 30px;
+            border: 1px solid #475569;
+            background: #111827;
+            color: #f8fafc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'ArkPixel', 'Courier New', monospace;
+            font-size: 18px;
+        }
+        .remote-agent-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .remote-agent-field {
+            display: grid;
+            gap: 5px;
+            color: #cbd5e1;
+            font-size: 12px;
+        }
+        .remote-agent-field-full {
+            grid-column: 1 / -1;
+        }
+        .remote-agent-field input {
+            width: 100%;
+            min-width: 0;
+            height: 34px;
+            padding: 0 9px;
+            border: 1px solid #475569;
+            background: #0b1020;
+            color: #f8fafc;
+            border-radius: 4px;
+            font-family: 'ArkPixel', 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .remote-agent-help {
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+        .remote-avatar-profile-btn {
+            width: 112px;
+            height: 112px;
+            flex: 0 0 auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            padding: 0;
+            border: 2px solid #334155;
+            background: #0b1020;
+            border-radius: 8px;
+            cursor: pointer;
+            overflow: hidden;
+        }
+        .remote-avatar-profile-btn:hover,
+        .remote-avatar-profile-btn:focus-visible {
+            border-color: #ffd166;
+            outline: none;
+        }
+        .remote-avatar-profile-btn img {
+            width: 400%;
+            height: 200%;
+            max-width: none;
+            object-fit: fill;
+            image-rendering: pixelated;
+        }
+        .remote-avatar-dialog {
+            position: fixed;
+            inset: 0;
+            z-index: 9100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(4, 7, 15, 0.62);
+        }
+        .remote-avatar-dialog[hidden] {
+            display: none !important;
+        }
+        .remote-avatar-panel {
+            width: min(420px, 100%);
+            background: #101421;
+            border: 2px solid #334155;
+            border-radius: 6px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+            padding: 12px;
+        }
+        .remote-avatar-dialog-header {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            margin-bottom: 10px;
+        }
+        .remote-avatar-close {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #475569;
+            background: #111827;
+            color: #f8fafc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'ArkPixel', 'Courier New', monospace;
+            font-size: 18px;
+        }
+        .remote-avatar-picker {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .remote-avatar-option {
+            min-width: 0;
+        }
+        .remote-avatar-option input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .remote-avatar-card {
+            height: 74px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            border: 2px solid #334155;
+            background: #0b1020;
+            border-radius: 5px;
+            cursor: pointer;
+            overflow: hidden;
+        }
+        .remote-avatar-card img {
+            width: 400%;
+            height: 200%;
+            max-width: none;
+            object-fit: fill;
+            image-rendering: pixelated;
+        }
+        .remote-avatar-option input:checked + .remote-avatar-card {
+            border-color: #ffd166;
+            background: #263047;
+        }
+        .remote-agent-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .remote-agent-actions button {
+            height: 32px;
+            padding: 0 12px;
+            border: 1px solid #475569;
+            background: #111827;
+            color: #f8fafc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'ArkPixel', 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .remote-agent-actions button[type="submit"] {
+            border-color: #f59e0b;
+            background: #ffd166;
+            color: #22170a;
+        }
+        .remote-agent-status {
+            min-height: 18px;
+            margin-top: 10px;
+            color: #94a3b8;
+            font-size: 12px;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .remote-agent-status.error {
+            color: #fca5a5;
+        }
+        .remote-agent-status.success {
+            color: #86efac;
         }
         #main-stage {
             position: relative;
@@ -1436,6 +1863,18 @@
             .agents-card-list {
                 max-width: none;
             }
+            .agent-info-layout,
+            .agent-info-grid,
+            .remote-agent-grid {
+                grid-template-columns: 1fr;
+            }
+            .remote-avatar-picker {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+            .remote-avatar-profile-btn {
+                width: 104px;
+                height: 104px;
+            }
             .agent-card {
                 grid-template-columns: 64px 1fr;
                 min-height: 82px;
@@ -1588,7 +2027,7 @@
         </div>
     </div>
 
-    <nav class="office-tabs" role="tablist" aria-label="Star Office views">
+    <nav class="office-tabs" role="tablist" aria-label="Clawffice🦞 views">
         <button id="tab-office" class="office-tab-btn active" type="button" role="tab" aria-selected="true" aria-controls="main-stage" onclick="switchOfficeTab('office')">office</button>
         <button id="tab-agents" class="office-tab-btn" type="button" role="tab" aria-selected="false" aria-controls="agents-view" onclick="switchOfficeTab('agents')">agents</button>
     </nav>
@@ -1597,7 +2036,93 @@
         <div id="agents-card-list" class="agents-card-list">
             <div class="agents-empty">agent 목록을 불러오는 중...</div>
         </div>
+        <button id="remote-agent-add-btn" class="agents-add-btn" type="button" title="원격 agent 추가" aria-label="원격 agent 추가">+</button>
     </section>
+
+    <div id="agent-info-modal" class="agent-info-modal" hidden>
+        <div class="agent-info-panel" role="dialog" aria-modal="true" aria-labelledby="agent-info-title">
+            <div class="agent-info-header">
+                <div id="agent-info-title" class="agent-info-title">Agent</div>
+                <button id="agent-info-close" class="agent-info-close" type="button" aria-label="닫기">×</button>
+            </div>
+            <div id="agent-info-content" class="agent-info-status">정보를 불러오는 중...</div>
+        </div>
+    </div>
+
+    <div id="remote-agent-modal" class="remote-agent-modal" hidden>
+        <form id="remote-agent-form" class="remote-agent-panel" autocomplete="off">
+            <div class="remote-agent-header">
+                <div class="remote-agent-heading">
+                    <div class="remote-agent-title">Agent 추가</div>
+                    <button id="remote-avatar-profile-btn" class="remote-avatar-profile-btn" type="button" aria-label="캐릭터 선택" title="캐릭터 선택">
+                        <img id="remote-avatar-profile-img" src="/static/guest_role_1.png?v={{VERSION_TIMESTAMP}}" alt="선택된 캐릭터">
+                    </button>
+                </div>
+                <button id="remote-agent-close" class="remote-agent-close" type="button" aria-label="닫기">×</button>
+            </div>
+            <div class="remote-agent-grid">
+                <label class="remote-agent-field">
+                    서버
+                    <input name="host" required list="remote-agent-host-options" placeholder="example.com 또는 10.0.0.5">
+                    <datalist id="remote-agent-host-options"></datalist>
+                    <span class="remote-agent-help">직접 입력하거나 이전에 연결한 서버를 선택하세요.</span>
+                </label>
+                <label class="remote-agent-field">
+                    SSH 사용자
+                    <input name="sshUser" required placeholder="opc">
+                </label>
+                <label class="remote-agent-field">
+                    SSH 포트
+                    <input name="sshPort" inputmode="numeric" placeholder="22" value="22">
+                </label>
+                <label class="remote-agent-field">
+                    agent 이름
+                    <input name="agentName" required placeholder="Research Agent">
+                </label>
+                <label class="remote-agent-field">
+                    OpenClaw agent id
+                    <input name="openclawAgentId" required placeholder="research-agent">
+                </label>
+                <label class="remote-agent-field">
+                    join key
+                    <input name="joinKey" required placeholder="ocj_xxx">
+                </label>
+                <label class="remote-agent-field remote-agent-field-full">
+                    office URL
+                    <input name="officeUrl" required>
+                    <span class="remote-agent-help">원격 agent가 이 Office UI로 접속할 전체 주소입니다. 포트가 있으면 포함하세요. 예: http://10.0.0.5:19000</span>
+                </label>
+                <label class="remote-agent-field remote-agent-field-full">
+                    SSH key path (office 서버 기준)
+                    <input name="sshKeyPath" placeholder="/home/opc/.ssh/id_rsa">
+                </label>
+                <label class="remote-agent-field remote-agent-field-full">
+                    SSH password (선택, 저장하지 않음)
+                    <input name="sshPassword" type="password" placeholder="sshpass 설치 시에만 사용 가능">
+                </label>
+                <div id="remote-avatar-dialog" class="remote-avatar-dialog" role="dialog" aria-modal="true" aria-label="캐릭터 선택" hidden>
+                    <div class="remote-avatar-panel">
+                        <div class="remote-avatar-dialog-header">
+                            <button id="remote-avatar-close" class="remote-avatar-close" type="button" aria-label="닫기">×</button>
+                        </div>
+                        <div class="remote-avatar-picker" role="radiogroup" aria-label="캐릭터 선택">
+                            <label class="remote-avatar-option"><input type="radio" name="avatar" value="guest_role_1" checked><span class="remote-avatar-card"><img src="/static/guest_role_1.png?v={{VERSION_TIMESTAMP}}" alt="캐릭터 1"></span></label>
+                            <label class="remote-avatar-option"><input type="radio" name="avatar" value="guest_role_2"><span class="remote-avatar-card"><img src="/static/guest_role_2.png?v={{VERSION_TIMESTAMP}}" alt="캐릭터 2"></span></label>
+                            <label class="remote-avatar-option"><input type="radio" name="avatar" value="guest_role_3"><span class="remote-avatar-card"><img src="/static/guest_role_3.png?v={{VERSION_TIMESTAMP}}" alt="캐릭터 3"></span></label>
+                            <label class="remote-avatar-option"><input type="radio" name="avatar" value="guest_role_4"><span class="remote-avatar-card"><img src="/static/guest_role_4.png?v={{VERSION_TIMESTAMP}}" alt="캐릭터 4"></span></label>
+                            <label class="remote-avatar-option"><input type="radio" name="avatar" value="guest_role_5"><span class="remote-avatar-card"><img src="/static/guest_role_5.png?v={{VERSION_TIMESTAMP}}" alt="캐릭터 5"></span></label>
+                            <label class="remote-avatar-option"><input type="radio" name="avatar" value="guest_role_6"><span class="remote-avatar-card"><img src="/static/guest_role_6.png?v={{VERSION_TIMESTAMP}}" alt="캐릭터 6"></span></label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="remote-agent-actions">
+                <button type="button" data-remote-agent-cancel>취소</button>
+                <button type="submit">생성</button>
+            </div>
+            <div id="remote-agent-status" class="remote-agent-status"></div>
+        </form>
+    </div>
 
     <div id="main-stage" class="tab-view" role="tabpanel" aria-labelledby="tab-office">
         <div id="game-container">
@@ -2657,6 +3182,56 @@
             const chatSendBtn = document.getElementById('chat-send-btn');
             const chatInput = document.getElementById('chat-input');
             const agentsList = document.getElementById('agents-card-list');
+            const agentInfoModal = document.getElementById('agent-info-modal');
+            const agentInfoClose = document.getElementById('agent-info-close');
+            const remoteAgentAddBtn = document.getElementById('remote-agent-add-btn');
+            const remoteAgentForm = document.getElementById('remote-agent-form');
+            const remoteAgentClose = document.getElementById('remote-agent-close');
+            const remoteAgentModal = document.getElementById('remote-agent-modal');
+            const remoteAvatarProfileBtn = document.getElementById('remote-avatar-profile-btn');
+            const remoteAvatarDialog = document.getElementById('remote-avatar-dialog');
+            const remoteAvatarClose = document.getElementById('remote-avatar-close');
+            if (remoteAgentAddBtn) remoteAgentAddBtn.addEventListener('click', openRemoteAgentModal);
+            if (remoteAgentForm) remoteAgentForm.addEventListener('submit', submitRemoteAgentForm);
+            if (remoteAgentForm) remoteAgentForm.addEventListener('change', handleRemoteAvatarChange);
+            if (remoteAgentClose) remoteAgentClose.addEventListener('click', closeRemoteAgentModal);
+            if (remoteAvatarProfileBtn) remoteAvatarProfileBtn.addEventListener('click', openRemoteAvatarDialog);
+            if (remoteAvatarClose) remoteAvatarClose.addEventListener('click', closeRemoteAvatarDialog);
+            if (remoteAvatarDialog) {
+                remoteAvatarDialog.addEventListener('click', (event) => {
+                    if (event.target === remoteAvatarDialog) closeRemoteAvatarDialog();
+                });
+            }
+            if (agentInfoClose) agentInfoClose.addEventListener('click', closeAgentInfoModal);
+            if (agentInfoModal) {
+                agentInfoModal.addEventListener('click', (event) => {
+                    if (event.target === agentInfoModal) closeAgentInfoModal();
+                    const saveModel = event.target.closest('[data-agent-info-save-model]');
+                    if (saveModel) saveAgentModel(saveModel);
+                    const saveThinking = event.target.closest('[data-agent-info-save-thinking]');
+                    if (saveThinking) saveAgentThinking(saveThinking);
+                    const contextAction = event.target.closest('[data-agent-info-context-action]');
+                    if (contextAction) runAgentContextAction(contextAction);
+                });
+            }
+            if (remoteAgentModal) {
+                remoteAgentModal.addEventListener('click', (event) => {
+                    if (event.target === remoteAgentModal) closeRemoteAgentModal();
+                    if (event.target.closest('[data-remote-agent-cancel]')) closeRemoteAgentModal();
+                });
+            }
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') return;
+                if (remoteAvatarDialog && !remoteAvatarDialog.hidden) {
+                    closeRemoteAvatarDialog();
+                    return;
+                }
+                if (agentInfoModal && !agentInfoModal.hidden) {
+                    closeAgentInfoModal();
+                    return;
+                }
+                if (remoteAgentModal && !remoteAgentModal.hidden) closeRemoteAgentModal();
+            });
             if (chatBackBtn) chatBackBtn.addEventListener('click', popStackPage);
             if (chatComposer) chatComposer.addEventListener('submit', submitChatMessage);
             if (chatSendBtn) chatSendBtn.addEventListener('click', submitChatMessage);
@@ -2678,7 +3253,10 @@
                         openAgentChatPage(agentId, name);
                         return;
                     }
-                    if (statusText) statusText.textContent = `[${name}] 정보`;
+                    if (action === 'info') {
+                        openAgentInfoModal(agentId, name);
+                        return;
+                    }
                 });
             }
             if (!menu) return;
@@ -2706,7 +3284,10 @@
                     openAgentChatPage(agentId, name);
                     return;
                 }
-                if (statusText) statusText.textContent = `[${name}] 정보`;
+                if (action === 'info') {
+                    openAgentInfoModal(agentId, name);
+                    return;
+                }
             });
         });
 
@@ -2745,6 +3326,229 @@
             })[ch]);
         }
 
+        function formatCompactNumber(value) {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return '-';
+            if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(n >= 10000000 ? 0 : 1) + 'm';
+            if (Math.abs(n) >= 1000) return (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k';
+            return String(Math.round(n));
+        }
+
+        function formatRelativeAge(ms) {
+            const n = Number(ms);
+            if (!Number.isFinite(n) || n < 0) return '-';
+            const sec = Math.round(n / 1000);
+            if (sec < 60) return `${sec}s ago`;
+            const min = Math.round(sec / 60);
+            if (min < 60) return `${min}m ago`;
+            const hr = Math.round(min / 60);
+            if (hr < 48) return `${hr}h ago`;
+            return `${Math.round(hr / 24)}d ago`;
+        }
+
+        function formatMaybeBool(value) {
+            if (typeof value === 'boolean') return value ? 'ok' : 'off';
+            return value ?? '-';
+        }
+
+        function agentInfoItem(label, value) {
+            const text = value === undefined || value === null || value === '' ? '-' : value;
+            return `<div class="agent-info-item"><div class="agent-info-label">${escapeHtml(label)}</div><div class="agent-info-value">${escapeHtml(text)}</div></div>`;
+        }
+
+        function agentInfoHtmlItem(label, html) {
+            return `<div class="agent-info-item"><div class="agent-info-label">${escapeHtml(label)}</div><div class="agent-info-value">${html}</div></div>`;
+        }
+
+        function renderModelControl(agent, modelConfig = {}) {
+            const models = Array.isArray(modelConfig.models) && modelConfig.models.length
+                ? modelConfig.models
+                : [modelConfig.effective].filter(Boolean);
+            const selected = modelConfig.configured || modelConfig.effective || '';
+            const options = models.map(model => `<option value="${escapeHtml(model)}" ${model === selected ? 'selected' : ''}>${escapeHtml(model)}</option>`).join('');
+            const inherited = modelConfig.configured ? '' : `기본값 ${modelConfig.default || '-'}`;
+            return `
+                <div class="agent-info-control">
+                    <select id="agent-info-model-select" aria-label="Model">${options}</select>
+                    <button type="button" data-agent-info-save-model data-agent-id="${escapeHtml(agent.agentId || 'star')}">저장</button>
+                </div>
+                <div style="margin-top:5px;color:#94a3b8;font-size:11px;line-height:1.35;">${escapeHtml(inherited || 'agent별 설정')}</div>
+            `;
+        }
+
+        function renderThinkingControl(agent, thinking = {}) {
+            const levels = Array.isArray(thinking.levels) && thinking.levels.length
+                ? thinking.levels
+                : ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive', 'max'];
+            const selected = thinking.configured || thinking.effective || '';
+            const options = levels.map(level => `<option value="${escapeHtml(level)}" ${level === selected ? 'selected' : ''}>${escapeHtml(level)}</option>`).join('');
+            const lastRun = thinking.lastRun ? `최근 run ${thinking.lastRun}` : '최근 run -';
+            const inherited = thinking.configured ? '' : ` · 기본값 ${thinking.default || '-'}`;
+            return `
+                <div class="agent-info-control">
+                    <select id="agent-info-thinking-select" aria-label="Think level">${options}</select>
+                    <button type="button" data-agent-info-save-thinking data-agent-id="${escapeHtml(agent.agentId || 'star')}">저장</button>
+                </div>
+                <div style="margin-top:5px;color:#94a3b8;font-size:11px;line-height:1.35;">${escapeHtml(lastRun + inherited)}</div>
+            `;
+        }
+
+        function renderContextControl(agent, contextLine) {
+            const agentId = escapeHtml(agent.agentId || 'star');
+            return `
+                <div class="agent-info-context-line">${escapeHtml(contextLine || '-')}</div>
+                <div class="agent-info-control">
+                    <button type="button" data-agent-info-context-action="compact" data-agent-id="${agentId}">Compact</button>
+                    <button type="button" class="danger" data-agent-info-context-action="reset" data-agent-id="${agentId}">Reset</button>
+                </div>
+            `;
+        }
+
+        function renderAgentInfo(data) {
+            const agent = data.agent || {};
+            const oc = data.openclaw || {};
+            const tokens = oc.tokens || {};
+            const context = oc.context || {};
+            const queue = oc.queue || {};
+            const server = oc.server || {};
+            const isMain = !!agent.isMain;
+            const avatarHtml = isMain
+                ? '<div class="agent-info-avatar agent-info-avatar-main" aria-hidden="true"></div>'
+                : `<div class="agent-info-avatar agent-info-avatar-guest" aria-hidden="true"><img src="/static/guest_role_${getAgentAvatarIndex(agent)}.png?v={{VERSION_TIMESTAMP}}" alt=""></div>`;
+            const modelConfig = oc.modelConfig || {};
+            const model = modelConfig.effective || [oc.modelProvider, oc.model].filter(Boolean).join('/') || oc.model || '-';
+            const cacheTotal = Number(tokens.cacheRead || 0) + Number(tokens.cacheWrite || 0);
+            const cacheLine = cacheTotal ? `${formatCompactNumber(tokens.cacheRead || 0)} read · ${formatCompactNumber(tokens.cacheWrite || 0)} write` : '-';
+            const contextLine = context.used || context.limit
+                ? `${formatCompactNumber(context.used)} / ${formatCompactNumber(context.limit)}${context.percent !== undefined ? ` (${context.percent}%)` : ''}`
+                : '-';
+            const queueLine = `active ${queue.active ?? 0} · queued ${queue.queued ?? 0} · running ${queue.running ?? 0}${queue.failures ? ` · issues ${queue.failures}` : ''}`;
+            const serverLine = server.host
+                ? `${server.sshUser ? `${server.sshUser}@` : ''}${server.host}${server.sshPort ? `:${server.sshPort}` : ''}`
+                : '-';
+            const thinking = oc.thinking || {};
+            const identity = [oc.identityEmoji, oc.identityName].filter(Boolean).join(' ') || '-';
+            const errors = Array.isArray(oc.errors) && oc.errors.length
+                ? agentInfoItem('OpenClaw 조회 경고', oc.errors.join(' / '))
+                : '';
+
+            return `
+                <div class="agent-info-layout">
+                    <div class="agent-info-profile">
+                        ${avatarHtml}
+                        <div class="agent-info-profile-meta">
+                            <div>${escapeHtml(agent.openclawAgentId || '-')}</div>
+                            <div>${escapeHtml(agent.state || '-')} · ${escapeHtml(agent.authStatus || '-')}</div>
+                            <div>${escapeHtml(formatAgentUpdatedAt(agent.lastPushAt))}</div>
+                        </div>
+                    </div>
+                    <div class="agent-info-grid">
+                        ${agentInfoItem('OpenClaw', oc.version ? `OpenClaw ${oc.version}` : '-')}
+                        ${agentInfoHtmlItem('Model', renderModelControl(agent, modelConfig))}
+                        ${agentInfoItem('Auth', oc.auth || '-')}
+                        ${agentInfoHtmlItem('Think level', renderThinkingControl(agent, thinking))}
+                        ${agentInfoItem('Tokens', `${formatCompactNumber(tokens.input)} in / ${formatCompactNumber(tokens.output)} out · total ${formatCompactNumber(tokens.total)}`)}
+                        ${agentInfoItem('Cache', cacheLine)}
+                        ${agentInfoHtmlItem('Context', renderContextControl(agent, contextLine))}
+                        ${agentInfoItem('Queue', queueLine)}
+                        ${agentInfoItem('Identity', identity)}
+                        ${agentInfoItem('Server', serverLine)}
+                        ${agentInfoItem('Workspace', oc.workspace || '-')}
+                        ${errors}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function openAgentInfoModal(agentId, fallbackName = 'Agent') {
+            const modal = document.getElementById('agent-info-modal');
+            const title = document.getElementById('agent-info-title');
+            const content = document.getElementById('agent-info-content');
+            if (!modal || !content) return;
+            if (title) title.textContent = fallbackName || 'Agent';
+            content.className = 'agent-info-status';
+            content.textContent = '정보를 불러오는 중...';
+            modal.hidden = false;
+            try {
+                const response = await fetch(`/agent-info?agentId=${encodeURIComponent(agentId || 'star')}&t=${Date.now()}`, { cache: 'no-store' });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) throw new Error(data.msg || `정보 조회 실패 (${response.status})`);
+                if (title) title.textContent = data.agent?.name || fallbackName || 'Agent';
+                content.className = '';
+                content.innerHTML = renderAgentInfo(data);
+            } catch (e) {
+                content.className = 'agent-info-status error';
+                content.textContent = e.message || String(e);
+            }
+        }
+
+        async function saveAgentInfoSetting(button, selectId, endpoint, payloadKey) {
+            const select = document.getElementById(selectId);
+            const agentId = button?.dataset?.agentId || 'star';
+            if (!select || !button) return;
+            const oldText = button.textContent;
+            button.disabled = true;
+            button.textContent = '저장 중';
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agentId, [payloadKey]: select.value })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) throw new Error(data.msg || `저장 실패 (${response.status})`);
+                button.textContent = '저장됨';
+                setTimeout(() => openAgentInfoModal(agentId, document.getElementById('agent-info-title')?.textContent || 'Agent'), 250);
+            } catch (e) {
+                button.textContent = '실패';
+                if (statusText) statusText.textContent = e.message || String(e);
+                setTimeout(() => { button.textContent = oldText || '저장'; }, 1000);
+            } finally {
+                setTimeout(() => { button.disabled = false; }, 300);
+            }
+        }
+
+        function saveAgentModel(button) {
+            return saveAgentInfoSetting(button, 'agent-info-model-select', '/agent-info/model', 'model');
+        }
+
+        function saveAgentThinking(button) {
+            return saveAgentInfoSetting(button, 'agent-info-thinking-select', '/agent-info/thinking', 'thinking');
+        }
+
+        async function runAgentContextAction(button) {
+            const action = button?.dataset?.agentInfoContextAction;
+            const agentId = button?.dataset?.agentId || 'star';
+            if (!action || !button) return;
+            if (action === 'reset' && !confirm('현재 agent session context를 reset할까요?')) return;
+            const oldText = button.textContent;
+            button.disabled = true;
+            button.textContent = action === 'compact' ? 'Compacting' : 'Resetting';
+            try {
+                const response = await fetch('/agent-info/context', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agentId, action })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) throw new Error(data.msg || `실행 실패 (${response.status})`);
+                button.textContent = 'Done';
+                if (statusText) statusText.textContent = data.message || `${oldText} 완료`;
+                setTimeout(() => openAgentInfoModal(agentId, document.getElementById('agent-info-title')?.textContent || 'Agent'), 350);
+            } catch (e) {
+                button.textContent = 'Failed';
+                if (statusText) statusText.textContent = e.message || String(e);
+                setTimeout(() => { button.textContent = oldText || action; }, 1200);
+            } finally {
+                setTimeout(() => { button.disabled = false; }, 300);
+            }
+        }
+
+        function closeAgentInfoModal() {
+            const modal = document.getElementById('agent-info-modal');
+            if (modal) modal.hidden = true;
+        }
+
         function getAgentTabItems() {
             const mainAgents = (guestAgents || []).filter(a => a && a.isMain);
             const visitors = getMergedVisitors();
@@ -2768,6 +3572,15 @@
             let hash = 0;
             for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
             return (hash % 6) + 1;
+        }
+
+        function formatOfficeStatusLine(data, stateInfo) {
+            const fallbackAgent = 'Star';
+            const rawAgent = data?.agentName || data?.name || data?.agentId || fallbackAgent;
+            const agent = String(rawAgent || fallbackAgent).trim() || fallbackAgent;
+            const state = stateInfo?.name || data?.state || '상태';
+            const detail = data?.detail || '...';
+            return `[${agent}] (${state}) ${detail}`;
         }
 
         function formatAgentUpdatedAt(value) {
@@ -2801,6 +3614,131 @@
             renderAgentsTabList();
             renderGuestAgentList();
             renderGuestAgentsInScene();
+        }
+
+        async function loadRemoteAgentHosts() {
+            try {
+                const response = await fetch('/remote-agent/hosts?t=' + Date.now(), { cache: 'no-store' });
+                const data = await response.json();
+                if (!response.ok || !data.ok || !Array.isArray(data.hosts)) return [];
+                const datalist = document.getElementById('remote-agent-host-options');
+                if (datalist) {
+                    datalist.innerHTML = data.hosts.map((item) => (
+                        `<option value="${escapeHtml(item.host)}" label="${escapeHtml([item.sshUser, item.sshPort].filter(Boolean).join(':'))}"></option>`
+                    )).join('');
+                }
+                return data.hosts;
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function applyRemoteHostDefaults(hosts) {
+            const form = document.getElementById('remote-agent-form');
+            if (!form) return;
+            const selected = (hosts || []).find(item => item.host === form.host?.value);
+            if (!selected) return;
+            if (selected.sshUser && form.sshUser && !form.sshUser.value) form.sshUser.value = selected.sshUser;
+            if (selected.sshPort && form.sshPort && (!form.sshPort.value || form.sshPort.value === '22')) form.sshPort.value = selected.sshPort;
+        }
+
+        async function openRemoteAgentModal() {
+            const modal = document.getElementById('remote-agent-modal');
+            const form = document.getElementById('remote-agent-form');
+            const status = document.getElementById('remote-agent-status');
+            if (!modal || !form) return;
+            if (form.officeUrl && !form.officeUrl.value) form.officeUrl.value = window.location.origin;
+            if (status) {
+                status.textContent = '';
+                status.classList.remove('error', 'success');
+            }
+            updateRemoteAvatarProfile();
+            const hosts = await loadRemoteAgentHosts();
+            form.__remoteHosts = hosts;
+            if (form.host && !form.__remoteHostBound) {
+                form.host.addEventListener('change', () => applyRemoteHostDefaults(form.__remoteHosts || []));
+                form.host.addEventListener('input', () => applyRemoteHostDefaults(form.__remoteHosts || []));
+                form.__remoteHostBound = true;
+            }
+            modal.hidden = false;
+            setTimeout(() => form.host?.focus(), 0);
+        }
+
+        function closeRemoteAgentModal() {
+            const modal = document.getElementById('remote-agent-modal');
+            const status = document.getElementById('remote-agent-status');
+            closeRemoteAvatarDialog(false);
+            if (modal) modal.hidden = true;
+            if (status) status.classList.remove('error', 'success');
+        }
+
+        function setRemoteAgentStatus(message, kind) {
+            const status = document.getElementById('remote-agent-status');
+            if (!status) return;
+            status.textContent = message || '';
+            status.classList.toggle('error', kind === 'error');
+            status.classList.toggle('success', kind === 'success');
+        }
+
+        function getSelectedRemoteAvatar() {
+            const checked = document.querySelector('#remote-agent-form input[name="avatar"]:checked');
+            return checked?.value || 'guest_role_1';
+        }
+
+        function updateRemoteAvatarProfile() {
+            const img = document.getElementById('remote-avatar-profile-img');
+            if (!img) return;
+            const avatar = getSelectedRemoteAvatar();
+            img.src = `/static/${avatar}.png?v={{VERSION_TIMESTAMP}}`;
+        }
+
+        function openRemoteAvatarDialog() {
+            const dialog = document.getElementById('remote-avatar-dialog');
+            if (!dialog) return;
+            dialog.hidden = false;
+            setTimeout(() => dialog.querySelector('input[name="avatar"]:checked')?.focus(), 0);
+        }
+
+        function closeRemoteAvatarDialog(restoreFocus = true) {
+            const dialog = document.getElementById('remote-avatar-dialog');
+            const profile = document.getElementById('remote-avatar-profile-btn');
+            if (dialog) dialog.hidden = true;
+            if (restoreFocus) profile?.focus();
+        }
+
+        function handleRemoteAvatarChange(event) {
+            if (!event.target || event.target.name !== 'avatar') return;
+            updateRemoteAvatarProfile();
+            closeRemoteAvatarDialog();
+        }
+
+        async function submitRemoteAgentForm(event) {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const formData = new FormData(form);
+            const payload = Object.fromEntries(formData.entries());
+            payload.remoteHost = payload.host || '';
+            payload.remoteSshUser = payload.sshUser || '';
+            payload.remoteSshPort = payload.sshPort || '';
+            if (submitBtn?.disabled) return;
+            setRemoteAgentStatus('원격 서버에 설치 명령을 보내는 중...', '');
+            if (submitBtn) submitBtn.disabled = true;
+            try {
+                const response = await fetch('/remote-agent/install', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) throw new Error(data.msg || `원격 설치 실패 (${response.status})`);
+                setRemoteAgentStatus(`${data.msg || '원격 agent 푸시를 시작했습니다'}\n로그: ${data.logFile || '-'}`, 'success');
+                await fetchGuestAgents();
+            } catch (e) {
+                setRemoteAgentStatus(e.message || String(e), 'error');
+            } finally {
+                if (submitBtn) submitBtn.disabled = false;
+            }
         }
 
         function renderAgentsTabList() {
@@ -5199,8 +6137,23 @@ function toggleBrokerPanel() {
                 });
         }
 
+        async function waitForPixelFonts() {
+            if (!document.fonts || !document.fonts.load) return;
+            try {
+                await Promise.all([
+                    document.fonts.load('12px ArkPixel', 'Office'),
+                    document.fonts.load('12px ArkPixel', '한글')
+                ]);
+                await document.fonts.ready;
+            } catch (e) {
+                console.warn('픽셀 폰트 로딩 확인 실패:', e);
+            }
+        }
+
         // 初始化：先检测 WebP 支持，再启动游戏
         async function initGame() {
+            await waitForPixelFonts();
+
             // 检测 WebP 支持
             try {
                 supportsWebP = await checkWebPSupport();
@@ -5958,7 +6911,7 @@ function toggleBrokerPanel() {
                         const stateInfo = STATES[nextState] || STATES.idle;
                         // If we're mid-transition, don't restart the path every poll
                         const changed = (pendingDesiredState === null) && (nextState !== currentState);
-                        const nextLine = '[' + stateInfo.name + '] ' + (data.detail || '...');
+                        const nextLine = formatOfficeStatusLine(data, stateInfo);
                         // 不论 changed 与否，都按服务端最新状态强制一次视觉同步，避免动画卡旧状态
                         pendingDesiredState = null;
                         if (currentState !== nextState) {
