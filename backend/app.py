@@ -1900,7 +1900,7 @@ def _conversation_messages_with_pending(conn, conversation_id: int, limit: int):
     ]
     turn_rows = conn.execute(
         """
-        SELECT user_message_id, status, gateway_accepted_at, reply_message_id
+        SELECT id, user_message_id, status, gateway_accepted_at, reply_message_id, error_text
         FROM chat_turns
         WHERE conversation_id = ?
         """,
@@ -1912,6 +1912,10 @@ def _conversation_messages_with_pending(conn, conversation_id: int, limit: int):
             continue
         turn = turns_by_user_id.get(message.get("id"))
         if turn:
+            if turn["status"] == "error":
+                message["failed"] = True
+                message["turnId"] = turn["id"]
+                message["errorText"] = turn["error_text"] or "전송에 실패했습니다."
             message["read"] = bool(turn["gateway_accepted_at"] or turn["reply_message_id"] or turn["status"] == "done")
             continue
         for next_message in messages[index + 1:]:
@@ -2617,6 +2621,106 @@ def update_chat_queue_item(item_id: int):
                     )
                 queue_items = _chat_queue_items(conn, conversation["id"])
         return jsonify({"ok": True, "queue": queue_items})
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+@app.route("/chat/retry/<int:turn_id>", methods=["POST"])
+def retry_chat_message(turn_id: int):
+    try:
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"ok": False, "msg": "invalid json"}), 400
+        agent_id = _normalize_chat_agent_id(data.get("agentId", ""))
+        agent_name = _normalize_chat_agent_name(data.get("agentName", ""), agent_id)
+        now_iso = datetime.now().isoformat()
+        retry_content = None
+        retry_turn_id = None
+        queued_payload = None
+        start_queued_after_response = False
+
+        with chat_db_lock:
+            with _chat_db() as conn:
+                conversation = _get_or_create_conversation(conn, agent_id, agent_name)
+                failed_turn = conn.execute(
+                    """
+                    SELECT t.id, t.conversation_id, t.user_message_id, t.status, m.content
+                    FROM chat_turns t
+                    JOIN messages m ON m.id = t.user_message_id
+                    WHERE t.id = ?
+                    """,
+                    (turn_id,),
+                ).fetchone()
+                if not failed_turn or failed_turn["conversation_id"] != conversation["id"] or failed_turn["status"] != "error":
+                    return jsonify({"ok": False, "msg": "재전송할 실패 메시지를 찾지 못했습니다"}), 404
+                retry_content = str(failed_turn["content"] or "").strip()
+                if not retry_content:
+                    return jsonify({"ok": False, "msg": "재전송할 메시지가 비어 있습니다"}), 400
+
+                _recover_pending_chat_turns(conn, conversation)
+                pending_turn = _get_pending_chat_turn(conn, conversation["id"])
+                existing_queue = _chat_queue_items(conn, conversation["id"])
+                if pending_turn or existing_queue:
+                    queue_item = _insert_chat_queue_item(conn, conversation["id"], retry_content, now_iso)
+                    conn.execute(
+                        "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
+                        (agent_name, now_iso, conversation["id"]),
+                    )
+                    messages, pending = _conversation_messages_with_pending(conn, conversation["id"], 200)
+                    queued_payload = {
+                        "ok": True,
+                        "queued": True,
+                        "pending": True,
+                        "queueItem": {
+                            "id": queue_item["id"],
+                            "content": queue_item["content"],
+                            "status": queue_item["status"],
+                            "createdAt": queue_item["created_at"],
+                            "updatedAt": queue_item["updated_at"],
+                        },
+                        "queue": _chat_queue_items(conn, conversation["id"]),
+                        "messages": messages,
+                        "conversation": {
+                            **_conversation_payload(conversation),
+                            "agentName": agent_name,
+                        },
+                    }
+                    start_queued_after_response = not pending
+                else:
+                    message = _insert_chat_message(conn, conversation["id"], "user", retry_content, now_iso)
+                    retry_turn = _insert_chat_turn(conn, conversation["id"], message["id"], now_iso)
+                    retry_turn_id = retry_turn["id"]
+                    conn.execute(
+                        "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
+                        (agent_name, now_iso, conversation["id"]),
+                    )
+                    response_payload = {
+                        "ok": True,
+                        "message": _message_payload(message),
+                        "pending": True,
+                        "messages": [_message_payload(message), _pending_message_payload({"id": retry_turn_id, "created_at": now_iso})],
+                        "queue": [],
+                        "conversation": {
+                            **_conversation_payload(conversation),
+                            "agentName": agent_name,
+                            "updatedAt": now_iso,
+                        },
+                    }
+
+        if queued_payload is not None:
+            if start_queued_after_response:
+                _start_next_queued_chat_turn(agent_id, agent_name)
+            return jsonify(queued_payload)
+
+        threading.Thread(
+            target=_complete_chat_turn_background,
+            args=(retry_turn_id, agent_id, agent_name, retry_content),
+            daemon=True,
+            name=f"chat-turn-{retry_turn_id}",
+        ).start()
+        return jsonify(response_payload)
     except ValueError as e:
         return jsonify({"ok": False, "msg": str(e)}), 400
     except Exception as e:

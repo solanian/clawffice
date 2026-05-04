@@ -702,6 +702,20 @@
             color: #f8fafc;
             font-family: 'ArkPixel', 'Courier New', monospace;
         }
+        body.chat-split-active #main-stage {
+            flex: 1 1 50%;
+            min-height: 0;
+            border-bottom: 2px solid #263047;
+        }
+        body.chat-split-active #page-stack {
+            position: relative;
+            inset: auto;
+            flex: 1 1 50%;
+            width: 100vw;
+            min-height: 0;
+            z-index: 6000;
+            border-top: 2px solid #0e1119;
+        }
         #page-stack[hidden] {
             display: none !important;
         }
@@ -857,6 +871,39 @@
         }
         .chat-read-receipt-read {
             color: #f8fafc;
+        }
+        .chat-read-receipt-failed {
+            color: #f87171;
+        }
+        .chat-failure-actions {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding-bottom: 1px;
+        }
+        .chat-retry-btn,
+        .chat-failure-dismiss-btn {
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border: 1px solid #dc2626;
+            background: #3b1117;
+            color: #fecaca;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .chat-failure-dismiss-btn {
+            font-size: 12px;
+        }
+        .chat-retry-btn:disabled,
+        .chat-failure-dismiss-btn:disabled {
+            cursor: wait;
+            opacity: 0.65;
         }
         .chat-queue {
             flex: 0 0 auto;
@@ -2871,12 +2918,24 @@
         let chatRenderedMessageKeys = [];
         let chatRenderedQueueKeys = [];
 
+        function refreshOfficeLayoutSoon() {
+            window.requestAnimationFrame(() => {
+                if (typeof window.applyOfficeCameraFit === 'function') window.applyOfficeCameraFit();
+            });
+        }
+
+        function setChatSplitActive(active) {
+            document.body.classList.toggle('chat-split-active', !!active);
+            refreshOfficeLayoutSoon();
+        }
+
         function showStackPage(pageId) {
             const stack = document.getElementById('page-stack');
             if (stack) stack.hidden = false;
             document.querySelectorAll('.stack-page').forEach((page) => {
                 page.hidden = page.id !== pageId;
             });
+            setChatSplitActive(pageId === 'chat-page');
         }
 
         function pushStackPage(pageId, state = {}) {
@@ -2891,6 +2950,7 @@
                 const stack = document.getElementById('page-stack');
                 if (stack) stack.hidden = true;
                 document.querySelectorAll('.stack-page').forEach((page) => { page.hidden = true; });
+                setChatSplitActive(false);
                 activeChat = null;
                 stopChatWaitingStatus();
                 stopChatPendingPoll();
@@ -3047,8 +3107,12 @@
             }
             const label = role === 'user' ? '나' : role === 'agent' ? agentName : '시스템';
             const roleClass = role === 'user' ? ' chat-message-user' : '';
+            const failed = role === 'user' && !!message.failed;
             const readReceipt = role === 'user'
-                ? `<span class="chat-read-receipt${options.read ? ' chat-read-receipt-read' : ''}">${options.read ? '읽음' : '안읽음'}</span>`
+                ? `<span class="chat-read-receipt${failed ? ' chat-read-receipt-failed' : options.read ? ' chat-read-receipt-read' : ''}">${failed ? '실패' : options.read ? '읽음' : '안읽음'}</span>`
+                : '';
+            const failureActions = failed && message.turnId
+                ? `<span class="chat-failure-actions"><button type="button" class="chat-retry-btn" data-chat-retry-turn-id="${escapeHtml(message.turnId)}" title="같은 메시지를 다시 보냅니다" aria-label="재전송">↺</button><button type="button" class="chat-failure-dismiss-btn" data-chat-failure-dismiss title="전송 실패 문구만 표시" aria-label="전송 실패 표시">x</button></span>`
                 : '';
             const bubble = `
                 <article class="chat-message${roleClass}">
@@ -3060,7 +3124,7 @@
                 </article>
             `;
             if (role === 'user') {
-                return `<div class="chat-user-line" ${keyAttr}>${readReceipt}${bubble}</div>`;
+                return `<div class="chat-user-line" ${keyAttr}>${readReceipt}${failureActions}${bubble}</div>`;
             }
             return `
                 <article class="chat-message${roleClass}" ${keyAttr}>
@@ -3231,6 +3295,30 @@
             const data = await response.json().catch(() => ({}));
             if (!response.ok || !data.ok) throw new Error(data.msg || 'queue 취소 실패');
             renderChatQueue(data.queue || [], { force: true });
+        }
+
+        async function retryChatMessage(button) {
+            const chat = getActiveChatState();
+            const turnId = button?.dataset?.chatRetryTurnId;
+            if (!chat || !turnId) return;
+            button.disabled = true;
+            button.textContent = '...';
+            try {
+                const response = await fetch(`/chat/retry/${encodeURIComponent(turnId)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agentId: chat.agentId, agentName: chat.agentName })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) throw new Error(data.msg || '재전송 실패');
+                if (Array.isArray(data.messages)) syncChatMessages(data.messages, { replace: false });
+                renderChatQueue(data.queue || []);
+                setChatConversationPending(!!data.pending || hasChatWaitingMessages(data.messages || []) || (data.queue || []).length > 0);
+                await loadChatConversation({ showLoading: false });
+            } finally {
+                button.disabled = false;
+                button.textContent = '↺';
+            }
         }
 
         async function loadChatConversation(options = {}) {
@@ -3436,6 +3524,26 @@
                 try {
                     if (event.target.closest('[data-chat-queue-save]')) await saveChatQueueItem(row);
                     if (event.target.closest('[data-chat-queue-cancel]')) await cancelChatQueueItem(row);
+                } catch (e) {
+                    if (statusText) statusText.textContent = e.message || String(e);
+                }
+            });
+            const chatMessages = document.getElementById('chat-messages');
+            if (chatMessages) chatMessages.addEventListener('click', async (event) => {
+                const dismissButton = event.target.closest('[data-chat-failure-dismiss]');
+                if (dismissButton) {
+                    const line = dismissButton.closest('.chat-user-line');
+                    const receipt = line?.querySelector('.chat-read-receipt');
+                    if (receipt) receipt.textContent = '전송 실패';
+                    line?.querySelectorAll('.chat-failure-actions button').forEach((button) => {
+                        button.disabled = true;
+                    });
+                    return;
+                }
+                const retryButton = event.target.closest('[data-chat-retry-turn-id]');
+                if (!retryButton) return;
+                try {
+                    await retryChatMessage(retryButton);
                 } catch (e) {
                     if (statusText) statusText.textContent = e.message || String(e);
                 }
