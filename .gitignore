@@ -14,7 +14,9 @@ venv/
 # Runtime state (local only)
 state.json
 agents-state.json
+office-agent-state.json
 runtime-config.json
+.openclaw/
 *.log
 *.out
 *.pid
