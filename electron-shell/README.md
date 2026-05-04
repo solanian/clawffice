@@ -6,7 +6,7 @@
 
 - 复用原有前端：`http://127.0.0.1:19000/?desktop=1`
 - 复用 mini 页面：`desktop-pet/src/minimized.html`
-- 启动时自动拉起 Python backend（若未运行）
+- 启动时自动拉起 TypeScript/SvelteKit server（若未运行）
 - 主窗口 / mini 窗口切换
 - 托盘（menu bar）常驻菜单
 - 通过 preload 注入 `window.__TAURI__` 兼容层，尽量少改现有前端逻辑
@@ -22,7 +22,7 @@ npm run dev
 ## 可选环境变量
 
 - `STAR_PROJECT_ROOT`：项目根目录（默认自动探测）
-- `STAR_BACKEND_PYTHON`：后端 Python 可执行路径
+- `STAR_BACKEND_NPM`：自定义 npm 可执行路径
 - `STAR_BACKEND_HOST`：后端主机（默认 `127.0.0.1`）
 - `STAR_BACKEND_PORT`：后端端口（默认 `19000`）
 

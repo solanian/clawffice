@@ -29,22 +29,18 @@ Your lobster will automatically clone the repo, install dependencies, start the 
 
 ### Option 2: 30-second manual setup
 
-> **Requires Python 3.10+** (the codebase uses `X | Y` union type syntax, which is not supported on 3.9 or earlier)
+> **Requires Node.js 24+** (Docker is recommended for production)
 
 ```bash
 # 1) Clone the repo
 git clone https://github.com/ringhyacinth/Star-Office-UI.git
 cd Star-Office-UI
 
-# 2) Install dependencies (Python 3.10+ required)
-python3 -m pip install -r backend/requirements.txt
+# 2) Install dependencies
+npm ci
 
-# 3) Initialize state file (first run)
-cp state.sample.json state.json
-
-# 4) Start the backend
-cd backend
-python3 app.py
+# 3) Start the TypeScript/SvelteKit server
+npm run dev
 ```
 
 Open **http://127.0.0.1:19000** and try switching states:
@@ -93,27 +89,26 @@ You can still deploy and use it. You can:
 
 ```bash
 cd Star-Office-UI
-python3 -m pip install -r backend/requirements.txt
+npm ci
 ```
 
-### 2) Initialize state file
+### 2) Start the server
 
 ```bash
-cp state.sample.json state.json
+npm run dev
 ```
 
-### 3) Start the backend
+For production, Docker is recommended:
 
 ```bash
-cd backend
-python3 app.py
+docker compose up -d --build
 ```
 
 Open `http://127.0.0.1:19000`
 
-> ✅ For local development you can start with the defaults; in production, copy `.env.example` to `.env` and set strong random values for `FLASK_SECRET_KEY` and `ASSET_DRAWER_PASS` to avoid weak passwords and session leaks.
+> ✅ For local development you can start with the defaults; in production, copy `.env.example` to `.env` and set strong random values for `STAR_OFFICE_SECRET` and `ASSET_DRAWER_PASS` to avoid weak passwords and session leaks.
 
-### 4) Switch states
+### 3) Switch states
 
 ```bash
 python3 set_state.py writing "Organizing documents"
@@ -267,10 +262,9 @@ Please keep attribution when redistributing or demoing, and follow the original 
 
 ```text
 Star-Office-UI/
-├── backend/            # Flask backend
-│   ├── app.py
-│   ├── requirements.txt
-│   └── run.sh
+├── src/                # SvelteKit / TypeScript server
+│   ├── lib/server/
+│   └── routes/
 ├── frontend/           # Frontend pages & assets
 │   ├── index.html
 │   ├── join.html
@@ -279,6 +273,8 @@ Star-Office-UI/
 ├── desktop-pet/        # Electron desktop wrapper (optional)
 ├── docs/               # Documentation & screenshots
 │   └── screenshots/
+├── Dockerfile           # Containerized server
+├── docker-compose.yml   # Local/production runtime config
 ├── office-agent-push.py  # Guest push script
 ├── set_state.py          # Status switch script
 ├── state.sample.json     # State file template

@@ -28,14 +28,10 @@ git clone https://github.com/ringhyacinth/Star-Office-UI.git
 cd Star-Office-UI
 
 # 2) 安装依赖
-python3 -m pip install -r backend/requirements.txt
+npm ci
 
-# 3) 准备状态文件（首次）
-cp state.sample.json state.json
-
-# 4) 启动后端
-cd backend
-python3 app.py
+# 3) 启动 TypeScript/SvelteKit 服务
+npm run dev
 ```
 
 然后告诉主人：
@@ -260,14 +256,14 @@ export ASSET_DRAWER_PASS="your-strong-pass"
 
 1. 进入项目目录并备份本地配置（如 `state.json`、自定义资产）。
 2. 拉取最新代码（`git pull` 或重新克隆到新目录）。
-3. 确认依赖：`python3 -m pip install -r backend/requirements.txt`。
+3. 确认依赖：`npm ci`。
 4. 保留并检查本地运行配置：
    - `ASSET_DRAWER_PASS`
    - `GEMINI_API_KEY` / `GEMINI_MODEL`（如需生图）
 5. 如有自定义位置，确认：
    - `asset-positions.json`
    - `asset-defaults.json`
-6. 重启后端并验收关键功能：
+6. 重启服务并验收关键功能：
    - `/health`
    - 三语切换（CN/EN/JP）
    - 资产侧栏（选择、替换、设默认）

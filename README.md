@@ -29,22 +29,18 @@ https://github.com/ringhyacinth/Star-Office-UI/blob/master/SKILL.md
 
 ### 方式二：30 秒手动部署
 
-> **环境要求：Python 3.10+**（代码使用了 `X | Y` union type 语法，不支持 3.9 及更低版本）
+> **环境要求：Node.js 24+**（推荐用 Docker 运行生产服务）
 
 ```bash
 # 1) 下载仓库
 git clone https://github.com/ringhyacinth/Star-Office-UI.git
 cd Star-Office-UI
 
-# 2) 安装依赖（需要 Python 3.10+）
-python3 -m pip install -r backend/requirements.txt
+# 2) 安装依赖
+npm ci
 
-# 3) 准备状态文件（首次）
-cp state.sample.json state.json
-
-# 4) 启动后端
-cd backend
-python3 app.py
+# 3) 启动 TypeScript/SvelteKit 服务
+npm run dev
 ```
 
 打开 **http://127.0.0.1:19000** 然后试试切状态：
@@ -94,27 +90,26 @@ python3 set_state.py idle "待命中"
 
 ```bash
 cd Star-Office-UI
-python3 -m pip install -r backend/requirements.txt
+npm ci
 ```
 
-### 2) 初始化状态文件
+### 2) 启动服务
 
 ```bash
-cp state.sample.json state.json
+npm run dev
 ```
 
-### 3) 启动后端
+生产环境推荐 Docker：
 
 ```bash
-cd backend
-python3 app.py
+docker compose up -d --build
 ```
 
 打开 `http://127.0.0.1:19000`
 
-> ✅ 首次部署可以先保留默认配置；在生产环境中，请复制 `.env.example` 为 `.env` 并设置强随机的 `FLASK_SECRET_KEY` 与 `ASSET_DRAWER_PASS`，避免弱密码和会话泄露。
+> ✅ 首次部署可以先保留默认配置；在生产环境中，请复制 `.env.example` 为 `.env` 并设置强随机的 `STAR_OFFICE_SECRET` 与 `ASSET_DRAWER_PASS`，避免弱密码和会话泄露。
 
-### 4) 切换状态
+### 3) 切换状态
 
 ```bash
 python3 set_state.py writing "正在整理文档"
@@ -268,10 +263,9 @@ npm run dev
 
 ```text
 Star-Office-UI/
-├── backend/            # Flask 后端
-│   ├── app.py
-│   ├── requirements.txt
-│   └── run.sh
+├── src/                # SvelteKit / TypeScript 服务
+│   ├── lib/server/
+│   └── routes/
 ├── frontend/           # 前端页面与资产
 │   ├── index.html
 │   ├── join.html
@@ -280,6 +274,8 @@ Star-Office-UI/
 ├── desktop-pet/        # Electron 桌面宠物版（可选）
 ├── docs/               # 文档与截图
 │   └── screenshots/
+├── Dockerfile           # 容器化服务
+├── docker-compose.yml   # 本地/生产运行配置
 ├── office-agent-push.py  # 访客推送脚本
 ├── set_state.py          # 状态切换脚本
 ├── state.sample.json     # 状态文件模板

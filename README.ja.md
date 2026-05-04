@@ -29,22 +29,18 @@ https://github.com/ringhyacinth/Star-Office-UI/blob/master/SKILL.md
 
 ### 方法 2：30 秒手動セットアップ
 
-> **Python 3.10+ が必要です**（コードベースは `X | Y` ユニオン型構文を使用しており、3.9 以前のバージョンではサポートされていません）
+> **Node.js 24+ が必要です**（本番環境では Docker 実行を推奨）
 
 ```bash
 # 1) リポジトリをクローン
 git clone https://github.com/ringhyacinth/Star-Office-UI.git
 cd Star-Office-UI
 
-# 2) 依存関係をインストール（Python 3.10+ が必要）
-python3 -m pip install -r backend/requirements.txt
+# 2) 依存関係をインストール
+npm ci
 
-# 3) 状態ファイルを初期化（初回のみ）
-cp state.sample.json state.json
-
-# 4) バックエンドを起動
-cd backend
-python3 app.py
+# 3) TypeScript/SvelteKit サーバーを起動
+npm run dev
 ```
 
 **http://127.0.0.1:19000** を開き、状態を切り替えてみましょう：
@@ -93,27 +89,26 @@ python3 set_state.py idle "待機中"
 
 ```bash
 cd Star-Office-UI
-python3 -m pip install -r backend/requirements.txt
+npm ci
 ```
 
-### 2) 状態ファイル初期化
+### 2) サーバー起動
 
 ```bash
-cp state.sample.json state.json
+npm run dev
 ```
 
-### 3) バックエンド起動
+本番環境では Docker を推奨します：
 
 ```bash
-cd backend
-python3 app.py
+docker compose up -d --build
 ```
 
 `http://127.0.0.1:19000` を開く
 
-> ✅ ローカル開発ではデフォルト設定のままで構いませんが、本番環境では `.env.example` を `.env` にコピーし、`FLASK_SECRET_KEY` と `ASSET_DRAWER_PASS` に十分な長さのランダム値を設定してください。
+> ✅ ローカル開発ではデフォルト設定のままで構いませんが、本番環境では `.env.example` を `.env` にコピーし、`STAR_OFFICE_SECRET` と `ASSET_DRAWER_PASS` に十分な長さのランダム値を設定してください。
 
-### 4) ステータス切替
+### 3) ステータス切替
 
 ```bash
 python3 set_state.py writing "ドキュメント整理中"
@@ -267,10 +262,9 @@ npm run dev
 
 ```text
 Star-Office-UI/
-├── backend/            # Flask バックエンド
-│   ├── app.py
-│   ├── requirements.txt
-│   └── run.sh
+├── src/                # SvelteKit / TypeScript サーバー
+│   ├── lib/server/
+│   └── routes/
 ├── frontend/           # フロントエンドページ & 資産
 │   ├── index.html
 │   ├── join.html
@@ -278,6 +272,8 @@ Star-Office-UI/
 │   └── layout.js
 ├── desktop-pet/        # Electron デスクトップラッパー（任意）
 ├── docs/               # ドキュメント & スクリーンショット
+├── Dockerfile           # コンテナ化サーバー
+├── docker-compose.yml   # ローカル / 本番実行設定
 │   └── screenshots/
 ├── office-agent-push.py  # ゲストプッシュスクリプト
 ├── set_state.py          # ステータス切替スクリプト

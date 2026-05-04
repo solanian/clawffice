@@ -407,13 +407,13 @@ fn find_project_root() -> PathBuf {
         } else {
             std::env::current_dir().unwrap_or_default().join(candidate)
         };
-        if abs.join("backend").join("app.py").exists() {
+        if abs.join("package.json").exists() && abs.join("frontend").join("index.html").exists() {
             return abs;
         }
     }
     let mut dir = std::env::current_dir().unwrap_or_default();
     for _ in 0..8 {
-        if dir.join("backend").join("app.py").exists()
+        if dir.join("package.json").exists()
             || dir.join("state.json").exists()
             || dir.join("state.sample.json").exists()
         {
@@ -432,7 +432,7 @@ fn find_project_root() -> PathBuf {
             home.join("Star-Office-UI"),
         ];
         for candidate in candidates {
-            if candidate.join("backend").join("app.py").exists() {
+            if candidate.join("package.json").exists() && candidate.join("frontend").join("index.html").exists() {
                 return candidate;
             }
         }
@@ -442,51 +442,44 @@ fn find_project_root() -> PathBuf {
 
 fn spawn_backend(root: &PathBuf) -> Option<Child> {
     if std::net::TcpStream::connect("127.0.0.1:19000").is_ok() {
-        eprintln!("ℹ️ backend already running on 127.0.0.1:19000");
+        eprintln!("ℹ️ server already running on 127.0.0.1:19000");
         return None;
     }
 
-    let script = root.join("backend").join("app.py");
-    if !script.exists() {
-        eprintln!("⚠️ backend/app.py not found: {}", script.display());
+    let package_json = root.join("package.json");
+    if !package_json.exists() {
+        eprintln!("⚠️ package.json not found: {}", package_json.display());
         return None;
     }
 
-    let mut candidates: Vec<(PathBuf, Vec<String>)> = vec![
-        (
-            root.join(".venv").join("bin").join("python"),
-            vec![script.to_string_lossy().to_string()],
-        ),
-        (
-            PathBuf::from("python3"),
-            vec![script.to_string_lossy().to_string()],
-        ),
-        (
-            PathBuf::from("python"),
-            vec![script.to_string_lossy().to_string()],
-        ),
-    ];
+    let script_name = if root.join("build").join("index.js").exists() {
+        "start"
+    } else {
+        "dev"
+    };
+    let mut candidates: Vec<(PathBuf, Vec<String>)> = vec![(
+        PathBuf::from("npm"),
+        vec!["run".to_string(), script_name.to_string()],
+    )];
 
-    if let Ok(custom_python) = std::env::var("STAR_BACKEND_PYTHON") {
-        candidates.insert(
-            0,
-            (
-                PathBuf::from(custom_python),
-                vec![script.to_string_lossy().to_string()],
-            ),
-        );
+    if let Ok(custom_npm) = std::env::var("STAR_BACKEND_NPM") {
+        candidates.insert(0, (PathBuf::from(custom_npm), vec!["run".to_string(), script_name.to_string()]));
     }
 
     for (bin, args) in candidates {
         let mut cmd = Command::new(&bin);
         cmd.current_dir(root)
             .args(&args)
+            .env("HOST", "127.0.0.1")
+            .env("PORT", "19000")
+            .env("ORIGIN", "http://127.0.0.1:19000")
+            .env("STAR_OFFICE_DATA_DIR", root)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
 
         match cmd.spawn() {
             Ok(child) => {
-                eprintln!("🚀 backend started with {}", bin.display());
+                eprintln!("🚀 server started with {} run {}", bin.display(), script_name);
                 return Some(child);
             }
             Err(err) => {

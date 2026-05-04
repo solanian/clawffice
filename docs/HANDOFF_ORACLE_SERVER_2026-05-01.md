@@ -22,12 +22,10 @@ Key code/config changes included:
 
 ## Runtime Setup
 
-The server required Python 3.10+ for Star Office UI. A Python 3.11 virtual environment was created under the deployed workspace and the backend dependencies were installed there.
-
-Required packages:
+The legacy Python/Flask server has been replaced by the TypeScript/SvelteKit server. Use the Docker service for deployment:
 
 ```bash
-pip install -r backend/requirements.txt requests
+docker compose up -d --build
 ```
 
 ## OpenClaw
@@ -85,11 +83,10 @@ The local Star Office UI backend and local push process that had been started du
 
 The server backend and push process were started as background processes. If they should survive reboot, create service manager units for:
 
-- Star Office UI backend
+- Star Office UI server
 - Star Office UI agent push
 
 Before exposing the UI publicly, configure strong production secrets:
 
-- `FLASK_SECRET_KEY` or `STAR_OFFICE_SECRET`
+- `STAR_OFFICE_SECRET`
 - `ASSET_DRAWER_PASS`
-

@@ -39,6 +39,7 @@ desktop-pet/src-tauri/icons/*Logo.png
 electron-shell/node_modules/
 electron-shell/release/
 join-keys.json
+desktop-pet/src-tauri/target/
 
 # TypeScript/SvelteKit local artifacts
 node_modules/

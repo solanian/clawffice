@@ -54,13 +54,13 @@ function findProjectRoot() {
     const custom = path.isAbsolute(process.env.STAR_PROJECT_ROOT)
       ? process.env.STAR_PROJECT_ROOT
       : path.resolve(process.cwd(), process.env.STAR_PROJECT_ROOT);
-    if (fs.existsSync(path.join(custom, "backend", "app.py"))) return custom;
+    if (fs.existsSync(path.join(custom, "package.json")) && fs.existsSync(path.join(custom, "frontend", "index.html"))) return custom;
   }
 
   const fromDir = __dirname;
   let cursor = fromDir;
   for (let i = 0; i < 8; i += 1) {
-    if (fs.existsSync(path.join(cursor, "backend", "app.py"))) return cursor;
+    if (fs.existsSync(path.join(cursor, "package.json")) && fs.existsSync(path.join(cursor, "frontend", "index.html"))) return cursor;
     const parent = path.dirname(cursor);
     if (parent === cursor) break;
     cursor = parent;
@@ -74,7 +74,7 @@ function findProjectRoot() {
     path.join(home, "Star-Office-UI"),
   ];
   for (const c of candidates) {
-    if (fs.existsSync(path.join(c, "backend", "app.py"))) return c;
+    if (fs.existsSync(path.join(c, "package.json")) && fs.existsSync(path.join(c, "frontend", "index.html"))) return c;
   }
 
   return process.cwd();
@@ -151,25 +151,31 @@ async function readStateWithFallback(projectRoot) {
 }
 
 function spawnBackend(projectRoot) {
-  const script = path.join(projectRoot, "backend", "app.py");
-  if (!fs.existsSync(script)) {
-    console.warn(`backend/app.py not found: ${script}`);
+  const packageJson = path.join(projectRoot, "package.json");
+  if (!fs.existsSync(packageJson)) {
+    console.warn(`package.json not found: ${packageJson}`);
     return null;
   }
 
+  const scriptName = fs.existsSync(path.join(projectRoot, "build", "index.js")) ? "start" : "dev";
   const candidates = [];
-  if (process.env.STAR_BACKEND_PYTHON) candidates.push(process.env.STAR_BACKEND_PYTHON);
-  candidates.push(path.join(projectRoot, ".venv", "bin", "python"));
-  candidates.push("python3");
-  candidates.push("python");
+  if (process.env.STAR_BACKEND_NPM) candidates.push(process.env.STAR_BACKEND_NPM);
+  candidates.push("npm");
 
   for (const bin of candidates) {
     try {
-      const child = spawn(bin, [script], {
+      const child = spawn(bin, ["run", scriptName], {
         cwd: projectRoot,
+        env: {
+          ...process.env,
+          HOST: BACKEND_HOST,
+          PORT: String(BACKEND_PORT),
+          ORIGIN: BACKEND_BASE_URL,
+          STAR_OFFICE_DATA_DIR: process.env.STAR_OFFICE_DATA_DIR || projectRoot,
+        },
         stdio: "inherit",
       });
-      console.log(`backend started with ${bin}`);
+      console.log(`server started with ${bin} run ${scriptName}`);
       return child;
     } catch (e) {
       console.warn(`failed to spawn ${bin}: ${e.message}`);
