@@ -494,6 +494,20 @@ def init_chat_db():
                 conn.execute("DROP TABLE chat_turns_old")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_turns_conversation_status ON chat_turns(conversation_id, status, id)")
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_turns_one_pending ON chat_turns(conversation_id) WHERE status = 'pending'")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS chat_queue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversation_id INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK (status IN ('queued', 'sent', 'cancelled')) DEFAULT 'queued',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    sent_message_id INTEGER,
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                    FOREIGN KEY (sent_message_id) REFERENCES messages(id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_queue_conversation_status ON chat_queue(conversation_id, status, id)")
 
 
 def _normalize_chat_agent_id(agent_id: str) -> str:
@@ -1530,6 +1544,47 @@ def _get_pending_chat_turn(conn, conversation_id: int):
     ).fetchone()
 
 
+def _insert_chat_queue_item(conn, conversation_id: int, content: str, created_at: str | None = None):
+    now_iso = created_at or datetime.now().isoformat()
+    cur = conn.execute(
+        """
+        INSERT INTO chat_queue (conversation_id, content, status, created_at, updated_at)
+        VALUES (?, ?, 'queued', ?, ?)
+        """,
+        (conversation_id, content, now_iso, now_iso),
+    )
+    return conn.execute(
+        """
+        SELECT id, conversation_id, content, status, created_at, updated_at
+        FROM chat_queue
+        WHERE id = ?
+        """,
+        (cur.lastrowid,),
+    ).fetchone()
+
+
+def _chat_queue_items(conn, conversation_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT id, content, status, created_at, updated_at
+        FROM chat_queue
+        WHERE conversation_id = ? AND status = 'queued'
+        ORDER BY id ASC
+        """,
+        (conversation_id,),
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "content": row["content"],
+            "status": row["status"],
+            "createdAt": row["created_at"],
+            "updatedAt": row["updated_at"],
+        }
+        for row in rows
+    ]
+
+
 def _insert_chat_turn(conn, conversation_id: int, user_message_id: int, created_at: str | None = None):
     now_iso = created_at or datetime.now().isoformat()
     cur = conn.execute(
@@ -1781,6 +1836,35 @@ def _pending_message_payload(turn):
         "pending": True,
         "turnId": turn["id"],
     }
+
+
+def _dequeue_next_chat_turn(conn, conversation_id: int):
+    if _get_pending_chat_turn(conn, conversation_id):
+        return None
+    item = conn.execute(
+        """
+        SELECT id, content, created_at
+        FROM chat_queue
+        WHERE conversation_id = ? AND status = 'queued'
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        (conversation_id,),
+    ).fetchone()
+    if not item:
+        return None
+    now_iso = datetime.now().isoformat()
+    message = _insert_chat_message(conn, conversation_id, "user", item["content"], now_iso)
+    turn = _insert_chat_turn(conn, conversation_id, message["id"], now_iso)
+    conn.execute(
+        """
+        UPDATE chat_queue
+        SET status = 'sent', sent_message_id = ?, updated_at = ?
+        WHERE id = ? AND status = 'queued'
+        """,
+        (message["id"], now_iso, item["id"]),
+    )
+    return turn, item["content"]
 
 
 def _conversation_messages_with_pending(conn, conversation_id: int, limit: int):
@@ -2349,37 +2433,83 @@ if os.path.exists(RUNTIME_CONFIG_FILE):
 init_chat_db()
 
 
+def _start_next_queued_chat_turn(agent_id: str, agent_name: str):
+    next_turn = None
+    with chat_db_lock:
+        with _chat_db() as conn:
+            conversation = _get_or_create_conversation(conn, agent_id, agent_name)
+            dequeued = _dequeue_next_chat_turn(conn, conversation["id"])
+            if dequeued:
+                next_turn, content = dequeued
+                conn.execute(
+                    "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
+                    (agent_name, datetime.now().isoformat(), conversation["id"]),
+                )
+    if not next_turn:
+        return
+    threading.Thread(
+        target=_complete_chat_turn_background,
+        args=(next_turn["id"], agent_id, agent_name, content),
+        daemon=True,
+        name=f"chat-turn-{next_turn['id']}",
+    ).start()
+
+
 def _complete_chat_turn_background(turn_id: int, agent_id: str, agent_name: str, content: str):
     try:
-        session_key, openclaw_agent_id, baseline_fingerprint, run_id = _start_openclaw_agent_turn(agent_id, content)
-        with chat_db_lock:
-            with _chat_db() as conn:
-                turn = conn.execute(
-                    "SELECT id, status FROM chat_turns WHERE id = ?",
-                    (turn_id,),
-                ).fetchone()
-                if not turn or turn["status"] != "pending":
-                    return
-                _mark_chat_turn_gateway_accepted(
-                    conn,
-                    turn_id,
-                    openclaw_agent_id=openclaw_agent_id,
-                    run_id=run_id,
-                )
-        reply_content = _wait_for_openclaw_assistant_reply(
-            session_key,
-            openclaw_agent_id,
-            baseline_fingerprint,
-            OPENCLAW_CHAT_TIMEOUT_SECONDS * 1000,
-        )
-    except Exception as e:
-        if "GatewayTransportError: gateway timeout" in str(e) or "gateway timeout" in str(e):
+        try:
+            session_key, openclaw_agent_id, baseline_fingerprint, run_id = _start_openclaw_agent_turn(agent_id, content)
             with chat_db_lock:
                 with _chat_db() as conn:
+                    turn = conn.execute(
+                        "SELECT id, status FROM chat_turns WHERE id = ?",
+                        (turn_id,),
+                    ).fetchone()
+                    if not turn or turn["status"] != "pending":
+                        return
+                    _mark_chat_turn_gateway_accepted(
+                        conn,
+                        turn_id,
+                        openclaw_agent_id=openclaw_agent_id,
+                        run_id=run_id,
+                    )
+            reply_content = _wait_for_openclaw_assistant_reply(
+                session_key,
+                openclaw_agent_id,
+                baseline_fingerprint,
+                OPENCLAW_CHAT_TIMEOUT_SECONDS * 1000,
+            )
+        except Exception as e:
+            if "GatewayTransportError: gateway timeout" in str(e) or "gateway timeout" in str(e):
+                with chat_db_lock:
+                    with _chat_db() as conn:
+                        conversation = _get_or_create_conversation(conn, agent_id, agent_name)
+                        _recover_pending_chat_turns(conn, conversation)
+                return
+            error_text = f"OpenClaw 대화 연결 실패: {e}"
+            with chat_db_lock:
+                with _chat_db() as conn:
+                    turn = conn.execute(
+                        "SELECT id, conversation_id, user_message_id, status FROM chat_turns WHERE id = ?",
+                        (turn_id,),
+                    ).fetchone()
+                    if not turn or turn["status"] != "pending":
+                        return
                     conversation = _get_or_create_conversation(conn, agent_id, agent_name)
-                    _recover_pending_chat_turns(conn, conversation)
+                    error_message = _insert_chat_message(conn, conversation["id"], "system", error_text)
+                    _finish_chat_turn(
+                        conn,
+                        turn_id,
+                        "error",
+                        error_message_id=error_message["id"],
+                        error_text=error_text,
+                    )
+                    conn.execute(
+                        "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
+                        (agent_name, error_message["created_at"], conversation["id"]),
+                    )
             return
-        error_text = f"OpenClaw 대화 연결 실패: {e}"
+
         with chat_db_lock:
             with _chat_db() as conn:
                 turn = conn.execute(
@@ -2389,53 +2519,32 @@ def _complete_chat_turn_background(turn_id: int, agent_id: str, agent_name: str,
                 if not turn or turn["status"] != "pending":
                     return
                 conversation = _get_or_create_conversation(conn, agent_id, agent_name)
-                error_message = _insert_chat_message(conn, conversation["id"], "system", error_text)
-                _finish_chat_turn(
-                    conn,
-                    turn_id,
-                    "error",
-                    error_message_id=error_message["id"],
-                    error_text=error_text,
-                )
-                conn.execute(
-                    "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
-                    (agent_name, error_message["created_at"], conversation["id"]),
-                )
-        return
-
-    with chat_db_lock:
-        with _chat_db() as conn:
-            turn = conn.execute(
-                "SELECT id, conversation_id, user_message_id, status FROM chat_turns WHERE id = ?",
-                (turn_id,),
-            ).fetchone()
-            if not turn or turn["status"] != "pending":
-                return
-            conversation = _get_or_create_conversation(conn, agent_id, agent_name)
-            if not _claim_chat_turn_for_completion(conn, turn_id):
-                return
-            existing_reply = _find_existing_agent_reply_for_user_message(conn, conversation["id"], turn["user_message_id"])
-            if existing_reply:
-                _finish_chat_turn(
-                    conn,
-                    turn_id,
-                    "done",
-                    openclaw_agent_id=openclaw_agent_id,
-                    reply_message_id=existing_reply["id"],
-                )
-                return
-            reply_message = _insert_chat_message(conn, conversation["id"], "agent", reply_content)
-            _finish_chat_turn(
-                conn,
-                turn_id,
-                "done",
-                openclaw_agent_id=openclaw_agent_id,
-                reply_message_id=reply_message["id"],
-            )
-            conn.execute(
-                "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
-                (agent_name, reply_message["created_at"], conversation["id"]),
-            )
+                if not _claim_chat_turn_for_completion(conn, turn_id):
+                    return
+                existing_reply = _find_existing_agent_reply_for_user_message(conn, conversation["id"], turn["user_message_id"])
+                if existing_reply:
+                    _finish_chat_turn(
+                        conn,
+                        turn_id,
+                        "done",
+                        openclaw_agent_id=openclaw_agent_id,
+                        reply_message_id=existing_reply["id"],
+                    )
+                else:
+                    reply_message = _insert_chat_message(conn, conversation["id"], "agent", reply_content)
+                    _finish_chat_turn(
+                        conn,
+                        turn_id,
+                        "done",
+                        openclaw_agent_id=openclaw_agent_id,
+                        reply_message_id=reply_message["id"],
+                    )
+                    conn.execute(
+                        "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
+                        (agent_name, reply_message["created_at"], conversation["id"]),
+                    )
+    finally:
+        _start_next_queued_chat_turn(agent_id, agent_name)
 
 
 @app.route("/chat/conversation", methods=["GET"])
@@ -2445,22 +2554,69 @@ def get_chat_conversation():
         agent_id = _normalize_chat_agent_id(request.args.get("agentId", ""))
         agent_name = _normalize_chat_agent_name(request.args.get("agentName", ""), agent_id)
         limit = min(500, max(1, int(request.args.get("limit", "200"))))
+        recovered_turns = 0
 
         with chat_db_lock:
             with _chat_db() as conn:
                 conversation = _get_or_create_conversation(conn, agent_id, agent_name)
                 _sync_openclaw_messages_for_conversation(conn, conversation)
-                _recover_pending_chat_turns(conn, conversation)
+                recovered_turns = _recover_pending_chat_turns(conn, conversation)
                 _expire_stale_chat_turns(conn)
                 conversation = _get_or_create_conversation(conn, agent_id, agent_name)
                 messages, pending = _conversation_messages_with_pending(conn, conversation["id"], limit)
+                queue_items = _chat_queue_items(conn, conversation["id"])
+
+        if recovered_turns or (queue_items and not pending):
+            _start_next_queued_chat_turn(agent_id, agent_name)
 
         return jsonify({
             "ok": True,
             "conversation": _conversation_payload(conversation),
             "messages": messages,
             "pending": pending,
+            "queue": queue_items,
         })
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+@app.route("/chat/queue/<int:item_id>", methods=["PATCH", "DELETE"])
+def update_chat_queue_item(item_id: int):
+    try:
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"ok": False, "msg": "invalid json"}), 400
+        agent_id = _normalize_chat_agent_id(data.get("agentId", ""))
+        agent_name = _normalize_chat_agent_name(data.get("agentName", ""), agent_id)
+        with chat_db_lock:
+            with _chat_db() as conn:
+                conversation = _get_or_create_conversation(conn, agent_id, agent_name)
+                item = conn.execute(
+                    "SELECT id, conversation_id, status FROM chat_queue WHERE id = ?",
+                    (item_id,),
+                ).fetchone()
+                if not item or item["conversation_id"] != conversation["id"] or item["status"] != "queued":
+                    return jsonify({"ok": False, "msg": "queue 항목을 찾지 못했습니다"}), 404
+                now_iso = datetime.now().isoformat()
+                if request.method == "DELETE":
+                    conn.execute(
+                        "UPDATE chat_queue SET status = 'cancelled', updated_at = ? WHERE id = ? AND status = 'queued'",
+                        (now_iso, item_id),
+                    )
+                else:
+                    content = str(data.get("content") or "").strip()
+                    if not content:
+                        return jsonify({"ok": False, "msg": "메시지를 입력해주세요"}), 400
+                    if len(content) > 8000:
+                        return jsonify({"ok": False, "msg": "메시지가 너무 깁니다"}), 400
+                    conn.execute(
+                        "UPDATE chat_queue SET content = ?, updated_at = ? WHERE id = ? AND status = 'queued'",
+                        (content, now_iso, item_id),
+                    )
+                queue_items = _chat_queue_items(conn, conversation["id"])
+        return jsonify({"ok": True, "queue": queue_items})
     except ValueError as e:
         return jsonify({"ok": False, "msg": str(e)}), 400
     except Exception as e:
@@ -2511,6 +2667,8 @@ def create_chat_message():
 
         now_iso = datetime.now().isoformat()
         turn_id = None
+        queued_payload = None
+        start_queued_after_response = False
         with chat_db_lock:
             with _chat_db() as conn:
                 conversation = _get_or_create_conversation(conn, agent_id, agent_name)
@@ -2518,26 +2676,50 @@ def create_chat_message():
                     _recover_pending_chat_turns(conn, conversation)
                 if role == "user":
                     pending_turn = _get_pending_chat_turn(conn, conversation["id"])
-                    if pending_turn:
-                        messages, _ = _conversation_messages_with_pending(conn, conversation["id"], 200)
-                        return jsonify({
-                            "ok": False,
-                            "msg": "이미 응답을 기다리는 중입니다. 응답이 완료된 뒤 다시 보내주세요.",
+                    existing_queue = _chat_queue_items(conn, conversation["id"])
+                    if pending_turn or existing_queue:
+                        queue_item = _insert_chat_queue_item(conn, conversation["id"], content, now_iso)
+                        conn.execute(
+                            "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
+                            (agent_name, now_iso, conversation["id"]),
+                        )
+                        messages, pending = _conversation_messages_with_pending(conn, conversation["id"], 200)
+                        queued_payload = {
+                            "ok": True,
+                            "queued": True,
                             "pending": True,
+                            "queueItem": {
+                                "id": queue_item["id"],
+                                "content": queue_item["content"],
+                                "status": queue_item["status"],
+                                "createdAt": queue_item["created_at"],
+                                "updatedAt": queue_item["updated_at"],
+                            },
+                            "queue": _chat_queue_items(conn, conversation["id"]),
                             "messages": messages,
                             "conversation": {
                                 **_conversation_payload(conversation),
                                 "agentName": agent_name,
                             },
-                        }), 409
-                message = _insert_chat_message(conn, conversation["id"], role, content, now_iso)
-                if role == "user":
-                    turn = _insert_chat_turn(conn, conversation["id"], message["id"], now_iso)
-                    turn_id = turn["id"]
-                conn.execute(
-                    "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
-                    (agent_name, now_iso, conversation["id"]),
-                )
+                        }
+                        start_queued_after_response = not pending
+                if queued_payload is not None:
+                    message = None
+                else:
+                    message = _insert_chat_message(conn, conversation["id"], role, content, now_iso)
+                if queued_payload is None:
+                    if role == "user":
+                        turn = _insert_chat_turn(conn, conversation["id"], message["id"], now_iso)
+                        turn_id = turn["id"]
+                    conn.execute(
+                        "UPDATE conversations SET agent_name = ?, updated_at = ? WHERE id = ?",
+                        (agent_name, now_iso, conversation["id"]),
+                    )
+
+        if queued_payload is not None:
+            if start_queued_after_response:
+                _start_next_queued_chat_turn(agent_id, agent_name)
+            return jsonify(queued_payload)
 
         if role != "user":
             return jsonify({
@@ -2562,6 +2744,7 @@ def create_chat_message():
             "message": _message_payload(message),
             "pending": True,
             "messages": [_message_payload(message), _pending_message_payload({"id": turn_id, "created_at": now_iso})],
+            "queue": [],
             "conversation": {
                 **_conversation_payload(conversation),
                 "agentName": agent_name,
